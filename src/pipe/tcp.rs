@@ -1,11 +1,11 @@
-use std::net::{TcpListener, TcpStream};
+use std::net::TcpStream;
 use std::io::{self, Read, Write, Result, BufReader, BufRead};
 use std::time::Duration;
 use super::pipe::Pipe;
 use crate::from_lit;
 use std::sync::atomic::{AtomicBool, Ordering};
 use colored::*;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 pub struct Tcp {
     pub stream: TcpStream
@@ -140,7 +140,7 @@ impl Pipe for Tcp {
                     Ok(n) => {
                         let response = &buffer[0..n];
                         print!("{}{}", begin_line, clear_line);
-                        let mut lit = to_lit_colored(&response, |x| x.normal(), |x| x.yellow());
+                        let lit = to_lit_colored(&response, |x| x.normal(), |x| x.yellow());
                         
                         println!("{}",lit);
                         prompt();
@@ -153,7 +153,7 @@ impl Pipe for Tcp {
         });    
 
         let stdin = io::stdin();
-        let mut handle = stdin.lock();
+        let handle = stdin.lock();
 
         let mut bytes = vec![0; 0];
         for byte_result in handle.bytes() {
@@ -173,7 +173,7 @@ impl Pipe for Tcp {
                 match d {
                     Ok(x) => {
                         bytes = x;
-                        let mut lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
+                        let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
             
                         println!("{}{}{}", go_up, clear_line, lit);
                         prompt();
@@ -230,7 +230,7 @@ impl Pipe for Tcp {
         });    
 
         let stdin = io::stdin();
-        let mut handle = stdin.lock();
+        let handle = stdin.lock();
 
         let mut bytes = vec![0; 0];
         for byte_result in handle.bytes() {

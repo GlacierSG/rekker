@@ -1,5 +1,3 @@
-use std::io::prelude::*;
-use std::net::TcpStream;
 
 pub struct Http1 {
     pub method: Vec<u8>,
@@ -25,7 +23,7 @@ impl Http1 {
     }
 
     pub fn url(mut self, value: impl AsRef<[u8]>) -> Self {
-        let mut value = value.as_ref();
+        let value = value.as_ref();
 
         let mut l = value.len();
         for i in 0..value.len() {

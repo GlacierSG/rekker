@@ -5,10 +5,9 @@ struct Udp {
 }
 
 impl Udp {
-   pub fn connect(addr: &str) -> std::io::Result<Udp> {
+    pub fn connect(addr: &str) -> std::io::Result<Udp> {
         Ok(Udp {
             stream: UdpSocket::bind(addr)?
         })
-   }
-
+    }
 }

@@ -1,4 +1,4 @@
-use std::io::{Read, Write, Result};
+use std::io::Result;
 
 pub trait Pipe {
     fn recv(&mut self, size: usize) -> Result<Vec<u8>>;
