@@ -6,7 +6,7 @@ It is still in development and a lot of features do not exist or have not been t
 ## Example
 ```python
 import rekker
-io = Tcp("localhost:1234")
+io = rekker.Tcp("localhost:1234")
 io.sendline(b"abcd")
 io.interactive()
 ```
