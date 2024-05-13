@@ -21,32 +21,32 @@ impl Tcp {
 }
 
 impl Pipe for Tcp {
-	fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
+    fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
         let mut buffer = vec![0; size];
         let size = self.stream.read(&mut buffer)?;
         Ok(buffer[..size].to_vec())
-	}
+    }
 
-	fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
+    fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
         let mut buffer = vec![0; size];
         let _ = self.stream.read_exact(&mut buffer)?;
         Ok(buffer)
-	}
+    }
 
-	fn recvline(&mut self) -> Result<Vec<u8>> {
+    fn recvline(&mut self) -> Result<Vec<u8>> {
         let mut buffer = Vec::new();
         let mut reader = BufReader::new(&self.stream);
 
         reader.read_until(10, &mut buffer)?;
 
         Ok(buffer)
-	}
+    }
 
-	fn recvuntil(&mut self, suffix: impl AsRef<[u8]>) -> Result<Vec<u8>> {
+    fn recvuntil(&mut self, suffix: impl AsRef<[u8]>) -> Result<Vec<u8>> {
         let suffix = suffix.as_ref();
-		if suffix.len() == 0 {
-			return Ok(vec![])
-		}
+        if suffix.len() == 0 {
+            return Ok(vec![])
+        }
         let mut buffer = vec![];
 
         let mut reader = BufReader::new(&self.stream);
@@ -61,31 +61,31 @@ impl Pipe for Tcp {
                 }
             }
         }
-	}
+    }
 
-	fn recvall(&mut self) -> Result<Vec<u8>> {
+    fn recvall(&mut self) -> Result<Vec<u8>> {
         let mut buffer = vec![];
 
         let mut reader = BufReader::new(&self.stream);
         let _ = reader.read_to_end(&mut buffer).unwrap();
         Ok(buffer)
-	}
+    }
 
-	fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<usize> {
+    fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<usize> {
         self.stream.write(msg.as_ref())
-	}
+    }
 
-	fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<usize> {
-		let mut tmp: Vec<u8> = msg.as_ref().to_vec();
-		tmp.extend(b"\n");
-		self.send(tmp.as_slice())
-	}
+    fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<usize> {
+        let mut tmp: Vec<u8> = msg.as_ref().to_vec();
+        tmp.extend(b"\n");
+        self.send(tmp.as_slice())
+    }
 
     fn sendlineafter(&mut self, suffix: impl AsRef<[u8]>, msg: impl AsRef<[u8]>) -> Result<Vec<u8>> {
-		let buf = self.recvuntil(suffix)?;
-		self.sendline(msg)?;
-		Ok(buf)
-	}
+        let buf = self.recvuntil(suffix)?;
+        self.sendline(msg)?;
+        Ok(buf)
+    }
 
     fn debug(&mut self) -> Result<()> {
         fn to_lit_colored(bytes: impl AsRef<[u8]>, normal_fn: fn(&str) -> ColoredString, byte_fn: fn(&str) -> ColoredString) -> String {
