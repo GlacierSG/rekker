@@ -1,8 +1,8 @@
-mod http1;
+mod req;
 mod pipe;
 mod literal;
 
-pub use http1::*;
+pub use req::*;
 pub use literal::*;
 pub use pipe::pipe::*;
 pub use pipe::tcp::*;

@@ -1,3 +1,23 @@
+use colored::*;
+
+pub fn to_lit_colored(bytes: impl AsRef<[u8]>, normal_fn: fn(&str) -> ColoredString, byte_fn: fn(&str) -> ColoredString) -> String {
+    let bytes = bytes.as_ref();
+    let mut lit = String::new();
+    for byte in bytes {
+        if *byte == 9  { lit.push_str(&format!("{}", byte_fn("\\t"))); }
+        else if *byte == 10 { lit.push_str(&format!("{}", byte_fn("\\n"))); }
+        else if *byte == 13 { lit.push_str(&format!("{}", byte_fn("\\r"))); }
+        else if *byte == 92 { lit.push_str(&format!("{}", byte_fn("\\\\"))); }
+        else if *byte >= 32 && *byte <= 126 {
+            lit.push_str(&format!("{}", normal_fn(&String::from_utf8(vec![*byte]).unwrap())));
+        }
+        else {
+            lit.push_str(&format!("{}", byte_fn(&format!("\\x{:02x}", byte))));
+        }
+    }
+    lit
+}
+
 pub fn from_lit(input: impl AsRef<[u8]>) -> Result<Vec<u8>, String> {
     let mut result = Vec::new();
     let bytes = input.as_ref();

@@ -2,7 +2,7 @@ use std::net::TcpStream;
 use std::io::{self, Read, Write, Result, BufReader, BufRead};
 use std::time::Duration;
 use super::pipe::Pipe;
-use crate::from_lit;
+use crate::{from_lit, to_lit_colored};
 use std::sync::atomic::{AtomicBool, Ordering};
 use colored::*;
 use std::sync::Arc;
@@ -88,25 +88,6 @@ impl Pipe for Tcp {
     }
 
     fn debug(&mut self) -> Result<()> {
-        fn to_lit_colored(bytes: impl AsRef<[u8]>, normal_fn: fn(&str) -> ColoredString, byte_fn: fn(&str) -> ColoredString) -> String {
-            let bytes = bytes.as_ref();
-            let mut lit = String::new();
-            for byte in bytes {
-                if *byte == 9  { lit.push_str(&format!("{}", byte_fn("\\t"))); }
-                else if *byte == 10 { lit.push_str(&format!("{}", byte_fn("\\n"))); }
-                else if *byte == 13 { lit.push_str(&format!("{}", byte_fn("\\r"))); }
-                else if *byte == 34 { lit.push_str(&format!("{}", byte_fn("\\\""))); }
-                else if *byte == 39 { lit.push_str(&format!("{}", byte_fn("\\\'"))); }
-                else if *byte == 92 { lit.push_str(&format!("{}", byte_fn("\\\\"))); }
-                else if *byte >= 32 && *byte <= 126 {
-                    lit.push_str(&format!("{}", normal_fn(&String::from_utf8(vec![*byte]).unwrap())));
-                }
-                else {
-                    lit.push_str(&format!("{}", byte_fn(&format!("\\x{:02x}", byte))));
-                }
-            }
-            lit
-        }
         let go_up = "\x1b[1A";
         let clear_line = "\x1b[2K";
         let begin_line = "\r";
