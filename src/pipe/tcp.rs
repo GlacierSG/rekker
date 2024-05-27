@@ -1,11 +1,12 @@
 use std::net::TcpStream;
-use std::io::{self, Read, Write, Result, BufReader, BufRead};
+use std::io::{self, Read, Write, Result, BufReader, BufRead, Error};
 use std::time::Duration;
 use super::pipe::Pipe;
 use crate::{from_lit, to_lit_colored};
 use std::sync::atomic::{AtomicBool, Ordering};
 use colored::*;
 use std::sync::Arc;
+use regex::Regex;
 
 pub struct Tcp {
     pub stream: TcpStream
@@ -13,11 +14,21 @@ pub struct Tcp {
 
 impl Tcp {
     pub fn connect(addr: &str) -> std::io::Result<Tcp> {
+        let re = Regex::new(r"\s+").unwrap();
+        let addr = re.replace_all(addr.trim(), ":");
         Ok(Tcp {
-            stream: TcpStream::connect(addr)?
+            stream: TcpStream::connect(addr.as_ref())?
         })
     }
+}
 
+impl Tcp {
+    pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
+        self.stream.set_nodelay(nagle)
+    }
+    pub fn nagle(&mut self) -> Result<bool> {
+        self.stream.nodelay()
+    }
 }
 
 impl Pipe for Tcp {
@@ -54,12 +65,16 @@ impl Pipe for Tcp {
             let mut tmp_buffer = vec![];
 
             let _ = reader.read_until(suffix[suffix.len()-1], &mut tmp_buffer)?;
+            if tmp_buffer.len() == 0 {
+                return Err(Error::new(io::ErrorKind::Other, "Got EOF for TCP stream"));
+            }
             buffer.extend(tmp_buffer);
             if suffix.len() <= buffer.len() {
                 if &suffix[..] == &buffer[(buffer.len()-suffix.len())..] {
                     return Ok(buffer);
                 }
             }
+
         }
     }
 
@@ -71,11 +86,11 @@ impl Pipe for Tcp {
         Ok(buffer)
     }
 
-    fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<usize> {
-        self.stream.write(msg.as_ref())
+    fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
+        self.stream.write_all(msg.as_ref())
     }
 
-    fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<usize> {
+    fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
         let mut tmp: Vec<u8> = msg.as_ref().to_vec();
         tmp.extend(b"\n");
         self.send(tmp.as_slice())
@@ -85,6 +100,14 @@ impl Pipe for Tcp {
         let buf = self.recvuntil(suffix)?;
         self.sendline(msg)?;
         Ok(buf)
+    }
+
+    fn read_timeout(&self) -> Result<Option<Duration>> {
+        self.stream.read_timeout()
+    }
+
+    fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
+        self.stream.set_read_timeout(dur)
     }
 
     fn debug(&mut self) -> Result<()> {
@@ -100,9 +123,8 @@ impl Pipe for Tcp {
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = running.clone();
 
-
-        let old_read_timeout = self.stream.read_timeout()?;
-        self.stream.set_read_timeout(Some(Duration::from_millis(1)))?;
+        let old_read_timeout = self.read_timeout()?;
+        self.set_read_timeout(Some(Duration::from_millis(1)))?;
 
 
         let mut stream_clone = self.stream.try_clone()?;
@@ -126,7 +148,8 @@ impl Pipe for Tcp {
                         println!("{}",lit);
                         prompt();
                     }
-                    Err(_) => {}
+                    Err(_) => {
+                    }
                 }
 
                 if !thread_running.load(Ordering::SeqCst) { break; }
@@ -138,30 +161,26 @@ impl Pipe for Tcp {
 
         let mut bytes = vec![0; 0];
         for byte_result in handle.bytes() {
-            bytes.push(byte_result?);
-            if bytes[bytes.len()-1] == 10 {
+            bytes.push(byte_result?); 
+            if bytes.len() != 0 && bytes[bytes.len()-1] == 10 {
                 if !running.load(Ordering::SeqCst) {
                     print!("{}{}{}", go_up, begin_line, clear_line,);
                     break;
                 }
-                let d;
-                if bytes.len() > 0 {
-                    d = from_lit(&bytes[..bytes.len()-1]);
-                }
-                else {
-                    d = from_lit(&bytes);
-                }
+                let d = from_lit(&bytes[..bytes.len()-1]);
                 match d {
                     Ok(x) => {
                         bytes = x;
                         let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
-            
                         println!("{}{}{}", go_up, clear_line, lit);
                         prompt();
-                        self.stream.write_all(&bytes)?;
-                        self.stream.flush()?;
+                        self.send(&bytes)?;
                     },
-                    Err(e) => eprintln!("{}", e.red()),
+                    Err(e) => {
+                        eprintln!("{}", e.red());
+                        print!("{}", "$ ".red());
+                        io::stdout().flush().expect("Unable to flush stdout");
+                    },
                 }
 
                 bytes = vec![0; 0];
@@ -169,7 +188,7 @@ impl Pipe for Tcp {
         }
         running.store(false, Ordering::SeqCst);
         
-        self.stream.set_read_timeout(old_read_timeout)?;
+        self.set_read_timeout(old_read_timeout)?;
 
         receiver.join().unwrap();
         
@@ -181,8 +200,8 @@ impl Pipe for Tcp {
         let thread_running = running.clone();
 
 
-        let old_read_timeout = self.stream.read_timeout()?;
-        self.stream.set_read_timeout(Some(Duration::from_millis(1)))?;
+        let old_read_timeout = self.read_timeout()?;
+        self.set_read_timeout(Some(Duration::from_millis(1)))?;
 
 
         let mut stream_clone = self.stream.try_clone()?;
@@ -221,18 +240,14 @@ impl Pipe for Tcp {
                     break;
                 }
     
-                //print!("{}", String::from_utf8_lossy(&bytes));
-                //io::stdout().flush().expect("Unable to flush stdout");
-
-                self.stream.write_all(&bytes)?;
-                self.stream.flush()?;
+                self.send(&bytes)?;
 
                 bytes = vec![0; 0];
             }
         }
         running.store(false, Ordering::SeqCst);
         
-        self.stream.set_read_timeout(old_read_timeout)?;
+        self.set_read_timeout(old_read_timeout)?;
 
         receiver.join().unwrap();
         

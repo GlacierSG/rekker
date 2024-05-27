@@ -44,12 +44,28 @@ impl Tcp {
         let out = self.tcp.recvn(size)?;
         Ok(PyBytes::new_bound(py, &out).into())
     }
-    fn recvline(&mut self, py: Python) -> PyResult<Py<PyBytes>> {
-        let out = self.tcp.recvline()?;
+    fn recvline(&mut self, py: Python, drop: Option<bool>) -> PyResult<Py<PyBytes>> {
+        let mut out = self.tcp.recvline()?;
+        
+        match drop {
+            Some(true) => {
+                out = out[..out.len()-1].to_vec(); 
+                },
+            _ => {}
+        }
         Ok(PyBytes::new_bound(py, &out).into())
     }
-    fn recvuntil(&mut self, py: Python, suffix: &[u8]) -> PyResult<Py<PyBytes>> {
-        let out = self.tcp.recvuntil(suffix)?;
+    fn recvuntil(&mut self, py: Python, suffix: &PyAny, drop: Option<bool>) -> PyResult<Py<PyBytes>> {
+        let suffix = inp_to_bytes(&suffix)?;
+        let mut out = self.tcp.recvuntil(suffix)?;
+
+        match drop {
+            Some(true) => {
+                out = out[..out.len()-1].to_vec(); 
+                },
+            _ => {}
+        }
+
         Ok(PyBytes::new_bound(py, &out).into())
     }
     fn recvall(&mut self, py: Python) -> PyResult<Py<PyBytes>> {
@@ -57,11 +73,11 @@ impl Tcp {
         Ok(PyBytes::new_bound(py, &out).into())
     }
 
-    fn send(&mut self, _py: Python, data: &PyAny) -> PyResult<usize> {
+    fn send(&mut self, _py: Python, data: &PyAny) -> PyResult<()> {
         let data = inp_to_bytes(&data)?;
         Ok(self.tcp.send(data)?)
     }
-    fn sendline(&mut self, _py: Python, data: &PyAny) -> PyResult<usize> {
+    fn sendline(&mut self, _py: Python, data: &PyAny) -> PyResult<()> {
         let data = inp_to_bytes(&data)?;
         Ok(self.tcp.sendline(data)?)
     }

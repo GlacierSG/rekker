@@ -33,6 +33,6 @@ fn main() {
    stdout().write_all(&tls.recv().unwrap()).unwrap();
 */
 
-    let mut io = Tcp::connect("localhost:1234").unwrap();
+    let mut io = Tcp::connect("localhost 6666").unwrap();
     io.debug();
 }
