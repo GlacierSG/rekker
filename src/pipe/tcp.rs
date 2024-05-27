@@ -26,7 +26,7 @@ impl Tcp {
     pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
         self.stream.set_nodelay(nagle)
     }
-    pub fn nagle(&mut self) -> Result<bool> {
+    pub fn nagle(&self) -> Result<bool> {
         self.stream.nodelay()
     }
 }
@@ -102,12 +102,18 @@ impl Pipe for Tcp {
         Ok(buf)
     }
 
-    fn read_timeout(&self) -> Result<Option<Duration>> {
+    fn recv_timeout(&self) -> Result<Option<Duration>> {
         self.stream.read_timeout()
     }
-
-    fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
+    fn set_recv_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
         self.stream.set_read_timeout(dur)
+    }
+
+    fn send_timeout(&self) -> Result<Option<Duration>> {
+        self.stream.write_timeout()
+    }
+    fn set_send_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
+        self.stream.set_write_timeout(dur)
     }
 
     fn debug(&mut self) -> Result<()> {
@@ -123,8 +129,8 @@ impl Pipe for Tcp {
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = running.clone();
 
-        let old_read_timeout = self.read_timeout()?;
-        self.set_read_timeout(Some(Duration::from_millis(1)))?;
+        let old_recv_timeout = self.recv_timeout()?;
+        self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
         let mut stream_clone = self.stream.try_clone()?;
@@ -188,7 +194,7 @@ impl Pipe for Tcp {
         }
         running.store(false, Ordering::SeqCst);
         
-        self.set_read_timeout(old_read_timeout)?;
+        self.set_recv_timeout(old_recv_timeout)?;
 
         receiver.join().unwrap();
         
@@ -200,8 +206,8 @@ impl Pipe for Tcp {
         let thread_running = running.clone();
 
 
-        let old_read_timeout = self.read_timeout()?;
-        self.set_read_timeout(Some(Duration::from_millis(1)))?;
+        let old_recv_timeout = self.recv_timeout()?;
+        self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
         let mut stream_clone = self.stream.try_clone()?;
@@ -247,7 +253,7 @@ impl Pipe for Tcp {
         }
         running.store(false, Ordering::SeqCst);
         
-        self.set_read_timeout(old_read_timeout)?;
+        self.set_recv_timeout(old_recv_timeout)?;
 
         receiver.join().unwrap();
         

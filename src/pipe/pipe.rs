@@ -12,8 +12,11 @@ pub trait Pipe {
     fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<()>;
     fn sendlineafter(&mut self, suffix: impl AsRef<[u8]>, msg: impl AsRef<[u8]>) -> Result<Vec<u8>>;
     
-    fn set_read_timeout(&mut self, dur: Option<Duration>) -> Result<()>;
-    fn read_timeout(&self) -> Result<Option<Duration>>;
+    fn set_recv_timeout(&mut self, dur: Option<Duration>) -> Result<()>;
+    fn recv_timeout(&self) -> Result<Option<Duration>>;
+
+    fn set_send_timeout(&mut self, dur: Option<Duration>) -> Result<()>;
+    fn send_timeout(&self) -> Result<Option<Duration>>;
 
 
     fn debug(&mut self) -> Result<()>;
