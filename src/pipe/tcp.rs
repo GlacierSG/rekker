@@ -91,9 +91,10 @@ impl Pipe for Tcp {
     }
 
     fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        let mut tmp: Vec<u8> = msg.as_ref().to_vec();
-        tmp.extend(b"\n");
-        self.send(tmp.as_slice())
+        let msg = msg.as_ref();
+        self.send(msg)?;
+        self.send(b"\n")?;
+        Ok(())
     }
 
     fn sendlineafter(&mut self, suffix: impl AsRef<[u8]>, msg: impl AsRef<[u8]>) -> Result<Vec<u8>> {
