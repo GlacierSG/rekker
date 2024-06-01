@@ -103,7 +103,7 @@ impl Pipe for Udp {
             }
             bi = self.buffer.len();
 
-            while self.add_to_buffer_blocking()? != 0 {}
+            self.add_to_buffer_blocking()?;
         }
     }
     fn recvuntil(&mut self, suffix: impl AsRef<[u8]>) -> Result<Vec<u8>> {
