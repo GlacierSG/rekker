@@ -8,6 +8,7 @@ use colored::*;
 use std::sync::Arc;
 use std::mem;
 use std::io::ErrorKind;
+use regex::Regex;
 
 pub struct Udp {
     stream: Option<UdpSocket>,
@@ -25,8 +26,11 @@ macro_rules! handle_stream_option {
 }
 impl Udp {
     pub fn connect(addr: &str) -> std::io::Result<Udp> {
+        let re = Regex::new(r"\s+").unwrap();
+        let addr = re.replace_all(addr.trim(), ":");
+
         let stream = UdpSocket::bind("0.0.0.0:0")?; 
-        stream.connect(addr)?;
+        stream.connect(addr.as_ref())?;
 
         Ok(Udp {
             stream: Some(stream),

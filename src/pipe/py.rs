@@ -46,7 +46,6 @@ macro_rules! save_recv_timeout_wrapper {
     ($self:expr, $func:expr, $timeout:expr) => {{
         let save_timeout = $self.stream.recv_timeout()?;
         $self.stream.set_recv_timeout(py_parse_duration($timeout)?)?;
-        println!("{:?}", $self.stream.recv_timeout());
         let out = match $func {
             Ok(d) => d,
             Err(e) => {
@@ -65,7 +64,6 @@ macro_rules! save_send_timeout_wrapper {
     ($self:expr, $func:expr, $timeout:expr) => {{
         let save_timeout = $self.stream.send_timeout()?;
         $self.stream.set_send_timeout(py_parse_duration($timeout)?)?;
-        println!("{:?}", $self.stream.send_timeout());
         let out = match $func {
             Ok(d) => d,
             Err(e) => {
@@ -96,12 +94,12 @@ impl Tcp {
     fn recv(&mut self, py: Python, size: usize, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let out = save_recv_timeout_wrapper!(self, self.stream.recv(size), timeout);
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvn(&mut self, py: Python, size: usize, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let out = save_recv_timeout_wrapper!(self, self.stream.recvn(size), timeout);
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvline(&mut self, py: Python, drop: Option<bool>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let mut out = save_recv_timeout_wrapper!(self, self.stream.recvline(), timeout);
@@ -112,7 +110,7 @@ impl Tcp {
                 },
             _ => {}
         }
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvuntil(&mut self, py: Python, suffix: &PyAny, drop: Option<bool>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let suffix = inp_to_bytes(&suffix)?;
@@ -126,12 +124,12 @@ impl Tcp {
             _ => {}
         }
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvall(&mut self, py: Python, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let out = save_recv_timeout_wrapper!(self, self.stream.recvall(), timeout);
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
 
     fn send(&mut self, _py: Python, data: &PyAny, timeout: Option<&str>) -> PyResult<()> {
@@ -148,7 +146,7 @@ impl Tcp {
         let data = inp_to_bytes(&data)?;
         let suffix = inp_to_bytes(&suffix)?;
         let out = save_send_timeout_wrapper!(self, self.stream.sendlineafter(data, suffix), timeout);
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
 
     fn recv_timeout(&self, _py: Python) -> PyResult<Option<String>> {
@@ -208,12 +206,12 @@ impl Udp {
     fn recv(&mut self, py: Python, size: usize, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let out = save_recv_timeout_wrapper!(self, self.stream.recv(size), timeout);
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvn(&mut self, py: Python, size: usize, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let out = save_recv_timeout_wrapper!(self, self.stream.recvn(size), timeout);
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvline(&mut self, py: Python, drop: Option<bool>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let mut out = save_recv_timeout_wrapper!(self, self.stream.recvline(), timeout);
@@ -224,7 +222,7 @@ impl Udp {
                 },
             _ => {}
         }
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvuntil(&mut self, py: Python, suffix: &PyAny, drop: Option<bool>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let suffix = inp_to_bytes(&suffix)?;
@@ -238,12 +236,12 @@ impl Udp {
             _ => {}
         }
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
     fn recvall(&mut self, py: Python, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
         let out = save_recv_timeout_wrapper!(self, self.stream.recvall(), timeout);
 
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
 
     fn send(&mut self, _py: Python, data: &PyAny, timeout: Option<&str>) -> PyResult<()> {
@@ -260,7 +258,7 @@ impl Udp {
         let data = inp_to_bytes(&data)?;
         let suffix = inp_to_bytes(&suffix)?;
         let out = save_send_timeout_wrapper!(self, self.stream.sendlineafter(data, suffix), timeout);
-        Ok(PyBytes::new_bound(py, &out).into())
+        Ok(PyBytes::new(py, &out).into())
     }
 
     fn recv_timeout(&self, _py: Python) -> PyResult<Option<String>> {
