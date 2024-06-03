@@ -193,6 +193,8 @@ impl Pipe for Tcp {
                 bytes = vec![0; 0];
             }
         }
+        print!("{}  {}", begin_line, begin_line);
+        io::stdout().flush().expect("Unable to flush stdout");
         running.store(false, Ordering::SeqCst);
         
         self.set_recv_timeout(old_recv_timeout)?;
