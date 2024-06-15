@@ -15,7 +15,6 @@ pub struct Udp {
     buffer: Vec<u8>,
 }
 
-#[macro_export]
 macro_rules! handle_stream_option {
     ($stream:expr) => {
         match $stream {

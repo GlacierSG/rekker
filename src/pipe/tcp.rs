@@ -9,22 +9,26 @@ use std::sync::Arc;
 use regex::Regex;
 
 pub struct Tcp {
-    pub stream: TcpStream
+    stream: TcpStream,
+    reader: BufReader<TcpStream>,
 }
 
 impl Tcp {
     pub fn connect(addr: &str) -> std::io::Result<Tcp> {
         let re = Regex::new(r"\s+").unwrap();
         let addr = re.replace_all(addr.trim(), ":");
-        Ok(Tcp {
-            stream: TcpStream::connect(addr.as_ref())?
-        })
+
+        let stream = TcpStream::connect(addr.as_ref())?;
+        let reader = BufReader::new(stream.try_clone()?);
+
+        Ok(Tcp{ stream, reader })
     }
 }
 
 impl Tcp {
     pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
-        self.stream.set_nodelay(nagle)
+        if nagle { self.stream.set_nodelay(false) }
+        else { self.stream.set_nodelay(true) }
     }
     pub fn nagle(&self) -> Result<bool> {
         self.stream.nodelay()
@@ -34,21 +38,19 @@ impl Tcp {
 impl Pipe for Tcp {
     fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
         let mut buffer = vec![0; size];
-        let size = self.stream.read(&mut buffer)?;
+        let size = self.reader.read(&mut buffer)?;
         Ok(buffer[..size].to_vec())
     }
 
     fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
         let mut buffer = vec![0; size];
-        let _ = self.stream.read_exact(&mut buffer)?;
+        let _ = self.reader.read_exact(&mut buffer)?;
         Ok(buffer)
     }
 
     fn recvline(&mut self) -> Result<Vec<u8>> {
         let mut buffer = Vec::new();
-        let mut reader = BufReader::new(&self.stream);
-
-        reader.read_until(10, &mut buffer)?;
+        self.reader.read_until(10, &mut buffer)?;
 
         Ok(buffer)
     }
@@ -60,11 +62,10 @@ impl Pipe for Tcp {
         }
         let mut buffer = vec![];
 
-        let mut reader = BufReader::new(&self.stream);
         loop {
             let mut tmp_buffer = vec![];
 
-            let _ = reader.read_until(suffix[suffix.len()-1], &mut tmp_buffer)?;
+            let _ = self.reader.read_until(suffix[suffix.len()-1], &mut tmp_buffer)?;
             if tmp_buffer.len() == 0 {
                 return Err(Error::new(io::ErrorKind::Other, "Got EOF for TCP stream"));
             }
@@ -81,8 +82,7 @@ impl Pipe for Tcp {
     fn recvall(&mut self) -> Result<Vec<u8>> {
         let mut buffer = vec![];
 
-        let mut reader = BufReader::new(&self.stream);
-        let _ = reader.read_to_end(&mut buffer).unwrap();
+        let _ = self.reader.read_to_end(&mut buffer).unwrap();
         Ok(buffer)
     }
 

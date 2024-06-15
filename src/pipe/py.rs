@@ -42,7 +42,6 @@ pub fn pipes(_py: Python, m: &PyModule)  -> PyResult<()> {
     Ok(())
 }
 
-#[macro_export]
 macro_rules! save_recv_timeout_wrapper {
     ($self:expr, $func:expr, $timeout:expr) => {{
         let save_timeout = $self.stream.recv_timeout()?;
@@ -60,7 +59,6 @@ macro_rules! save_recv_timeout_wrapper {
     }}
 }
 
-#[macro_export]
 macro_rules! save_send_timeout_wrapper {
     ($self:expr, $func:expr, $timeout:expr) => {{
         let save_timeout = $self.stream.send_timeout()?;
