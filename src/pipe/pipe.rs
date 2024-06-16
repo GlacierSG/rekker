@@ -18,9 +18,6 @@ pub trait Pipe {
     fn set_send_timeout(&mut self, dur: Option<Duration>) -> Result<()>;
     fn send_timeout(&self) -> Result<Option<Duration>>;
 
-
-    fn debug(&mut self) -> Result<()>;
-    fn interactive(&mut self) -> Result<()>;
     fn close(&mut self) -> Result<()>;
 }
 

@@ -51,15 +51,15 @@ impl Req {
         }
         self
     }
-    pub fn get(mut self, url: impl AsRef<[u8]>) -> Self {
+    pub fn get(self, url: impl AsRef<[u8]>) -> Self {
         self.method(b"GET")
             .url(url.as_ref())
     }
-    pub fn post(mut self, url: impl AsRef<[u8]>) -> Self {
+    pub fn post(self, url: impl AsRef<[u8]>) -> Self {
         self.method(b"POST")
             .url(url.as_ref())
     }
-    pub fn put(mut self, url: impl AsRef<[u8]>) -> Self {
+    pub fn put(self, url: impl AsRef<[u8]>) -> Self {
         self.method(b"PUT")
             .url(url.as_ref())
     }

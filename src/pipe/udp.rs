@@ -172,7 +172,15 @@ impl Pipe for Udp {
         handle_stream_option!(&self.stream).set_write_timeout(dur)
     }
 
-    fn debug(&mut self) -> Result<()> {
+    fn close(&mut self) -> Result<()> {
+        self.stream = None;
+        self.buffer.clear();
+        Ok(())
+    }
+}
+
+impl Udp {
+    pub fn debug(&mut self) -> Result<()> {
         let go_up = "\x1b[1A";
         let clear_line = "\x1b[2K";
         let begin_line = "\r";
@@ -259,7 +267,7 @@ impl Pipe for Udp {
         Ok(())
     }
 
-    fn interactive(&mut self) -> Result<()> {
+    pub fn interactive(&mut self) -> Result<()> {
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = running.clone();
 
@@ -318,10 +326,4 @@ impl Pipe for Udp {
         Ok(())
     }
 
-
-    fn close(&mut self) -> Result<()> {
-        self.stream = None;
-        self.buffer.clear();
-        Ok(())
-    }
 }

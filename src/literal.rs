@@ -52,32 +52,6 @@ pub fn from_lit(input: impl AsRef<[u8]>) -> Result<Vec<u8>, String> {
                     result.push(v);
                     i += 4;
                 }
-                b'1' | b'2' | b'3' | b'4' | b'5' | b'6' | b'7' | b'8' | b'9' => {
-                    let mut v = 0;
-                    if 48 <= bytes[i + 2] && bytes[i + 2] <= 57 {
-                        v += bytes[i + 2];
-                    } else {
-                        return Err(format!("Incomplete \\1..9 escape sequence at {}", i));
-                    }
-
-                    if 48 <= bytes[i + 3] && bytes[i + 3] <= 57 {
-                        v += bytes[i + 3];
-                    } else {
-                        return Err(format!("Incomplete \\1..9 escape sequence at {}", i));
-                    }
-
-                    if 48 <= bytes[i + 4] && bytes[i + 4] <= 57 {
-                        if v <= 255 - bytes[i + 4] {
-                            v += bytes[i + 4];
-                            i += 3;
-                        } else {
-                            i += 2;
-                        }
-                    } else {
-                        i += 2;
-                    }
-                    result.push(v);
-                }
                 b'0' => {
                     result.push(b'\0');
                     i += 2;

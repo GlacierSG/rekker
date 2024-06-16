@@ -150,7 +150,13 @@ impl Pipe for Tls {
         self.stream.set_write_timeout(dur)
     }
 
-    fn debug(&mut self) -> Result<()> {
+    fn close(&mut self) -> Result<()> {
+        self.stream.shutdown(std::net::Shutdown::Both)
+    }
+}
+
+impl Tls {
+    pub fn debug(&mut self) -> Result<()> {
         let go_up = "\x1b[1A";
         let clear_line = "\x1b[2K";
         let begin_line = "\r";
@@ -237,7 +243,7 @@ impl Pipe for Tls {
         Ok(())
     }
 
-    fn interactive(&mut self) -> Result<()> {
+    pub fn interactive(&mut self) -> Result<()> {
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = running.clone();
 
@@ -296,8 +302,5 @@ impl Pipe for Tls {
         Ok(())
     }
 
-    fn close(&mut self) -> Result<()> {
-        self.stream.shutdown(std::net::Shutdown::Both)
-    }
 }
 
