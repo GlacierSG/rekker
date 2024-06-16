@@ -4,7 +4,7 @@ use pyo3::types::{PyBytes, PyString, PyAny};
 use std::time::Duration;
 use humantime::parse_duration;
 
-pub(crate) fn inp_to_bytes(obj: &PyAny) -> PyResult<Vec<u8>> {
+fn inp_to_bytes(obj: &PyAny) -> PyResult<Vec<u8>> {
     if obj.is_instance_of::<PyString>() {
         let s: String = obj.extract()?;
         Ok(s.as_bytes().to_vec())
@@ -18,7 +18,7 @@ pub(crate) fn inp_to_bytes(obj: &PyAny) -> PyResult<Vec<u8>> {
     }
 }
 
-pub(crate) fn py_parse_duration(duration: Option<&str>) -> PyResult<Option<Duration>> {
+fn py_parse_duration(duration: Option<&str>) -> PyResult<Option<Duration>> {
     match duration {
         Some(dur) => {
             match parse_duration(dur) {
@@ -58,7 +58,6 @@ macro_rules! save_recv_timeout_wrapper {
         out
     }}
 }
-pub(crate) use save_recv_timeout_wrapper;
 
 macro_rules! save_send_timeout_wrapper {
     ($self:expr, $func:expr, $timeout:expr) => {{
@@ -76,8 +75,6 @@ macro_rules! save_send_timeout_wrapper {
         out
     }}
 }
-pub(crate) use save_send_timeout_wrapper;
-
 
 macro_rules! impl_py_stream {
     ($type:tt) => {
