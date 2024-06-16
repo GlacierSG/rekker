@@ -34,14 +34,6 @@ fn py_parse_duration(duration: Option<&str>) -> PyResult<Option<Duration>> {
     }
 }
 
-
-pub fn pipes(_py: Python, m: &PyModule)  -> PyResult<()> {
-    m.add_class::<Tcp>()?;
-    m.add_class::<Udp>()?;
-    m.add_class::<Tls>()?;
-    Ok(())
-}
-
 macro_rules! save_recv_timeout_wrapper {
     ($self:expr, $func:expr, $timeout:expr) => {{
         let save_timeout = $self.stream.recv_timeout()?;
@@ -197,4 +189,36 @@ impl Tcp {
     fn nagle(&self, _py: Python) -> PyResult<bool> {
         Ok(self.stream.nagle()?)
     }
+}
+
+
+
+#[pyclass]
+pub struct TcpListen {
+    listener: super::tcp_listen::TcpListen
+}
+
+
+#[pymethods]
+impl TcpListen {
+    #[new]
+    fn new(address: &str) -> PyResult<Self> {
+        Ok( TcpListen{ listener: super::tcp_listen::TcpListen::new(address)? } )
+    }
+
+    fn accept(&self, py: Python) -> PyResult<(PyObject, String)> {
+        let (stream, addr) = self.listener
+            .accept()?;
+        let py_stream = Py::new(py, Tcp { stream })?;
+        Ok((py_stream.to_object(py), addr.to_string()))
+    }
+}
+
+
+pub fn pipes(_py: Python, m: &PyModule)  -> PyResult<()> {
+    m.add_class::<Tcp>()?;
+    m.add_class::<TcpListen>()?;
+    m.add_class::<Udp>()?;
+    m.add_class::<Tls>()?;
+    Ok(())
 }
