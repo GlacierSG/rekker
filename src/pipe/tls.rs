@@ -103,7 +103,7 @@ impl Pipe for Tls {
                     buffer.extend(&byte);
                 }
             }
-            if buffer.len() >= suffix.len() && &suffix[..] == &buffer[suffix.len()-suffix.len()..] {
+            if buffer.len() >= suffix.len() && &suffix[..] == &buffer[buffer.len()-suffix.len()..] {
                 return Ok(buffer);
             }
         }

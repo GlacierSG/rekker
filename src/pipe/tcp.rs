@@ -15,7 +15,7 @@ pub struct Tcp {
 }
 
 impl Tcp {
-    pub fn connect(addr: &str) -> std::io::Result<Tcp> {
+    pub fn connect(addr: &str) -> Result<Tcp> {
         let re = Regex::new(r"\s+").unwrap();
         let addr = re.replace_all(addr.trim(), ":");
 
@@ -27,6 +27,11 @@ impl Tcp {
         let _ = tcp.set_nagle(false);
 
         Ok(tcp)
+    }
+    
+    pub fn from_stream(stream: TcpStream) -> Result<Self> {
+        let reader = BufReader::new(stream.try_clone()?);
+        Ok(Tcp { stream, reader })
     }
 }
 
