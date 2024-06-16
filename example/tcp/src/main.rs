@@ -34,7 +34,5 @@ fn main() {
 */
 
     let mut io = Tcp::connect("localhost 9000").unwrap();
-    println!("{:?}",io.recvuntil(b"abc").unwrap());
-    io.debug();
-    io.interactive();
+    dbg!(io.recvline());
 }
