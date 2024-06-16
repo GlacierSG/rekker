@@ -27,8 +27,7 @@ impl Tcp {
 
 impl Tcp {
     pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
-        if nagle { self.stream.set_nodelay(false) }
-        else { self.stream.set_nodelay(true) }
+        self.stream.set_nodelay(!nagle)
     }
     pub fn nagle(&self) -> Result<bool> {
         self.stream.nodelay()
