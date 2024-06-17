@@ -77,13 +77,6 @@ macro_rules! impl_py_stream {
 
         #[pymethods]
         impl $type {
-            #[new] 
-            fn connect(addr: &str) -> std::io::Result<$type> {
-                Ok($type {
-                    stream: crate::$type::connect(addr)?
-                })
-            }
-
             fn recv(&mut self, py: Python, size: usize, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
                 let out = save_recv_timeout_wrapper!(self, self.stream.recv(size), timeout);
 
@@ -183,6 +176,13 @@ impl_py_stream!(Udp);
 
 #[pymethods]
 impl Tcp {
+    #[new] 
+    fn connect(addr: &str) -> std::io::Result<Tcp> {
+        Ok(Tcp {
+            stream: crate::Tcp::connect(addr)?
+        })
+    }
+
     fn set_nagle(&mut self, _py: Python, nagle: bool) -> PyResult<()> {
         Ok(self.stream.set_nagle(nagle)?)
     }
@@ -191,6 +191,30 @@ impl Tcp {
     }
 }
 
+#[pymethods]
+impl Udp {
+    #[new] 
+    fn connect(addr: &str, listen: Option<bool>) -> std::io::Result<Udp> {
+        if Some(true) == listen {
+            return Ok(Udp {
+                    stream: crate::Udp::listen(addr)?
+                });
+        }
+        Ok(Udp {
+            stream: crate::Udp::connect(addr)?
+        })
+    }
+}
+
+#[pymethods]
+impl Tls {
+    #[new] 
+    fn connect(addr: &str) -> std::io::Result<Tls> {
+        Ok(Tls {
+            stream: crate::Tls::connect(addr)?
+        })
+    }
+}
 
 
 #[pyclass]

@@ -35,7 +35,7 @@ impl Tls {
         config.key_log = Arc::new(rustls::KeyLogFile::new());
         
         let stream = TcpStream::connect(&addr)?;
-        let t1: Vec<&str> = addr.split(|b| b as u32 == 58).collect();
+        let t1: Vec<&str> = addr.split(|b| b as u32 == 58).collect(); // split on ':'
         if let Some(t1) = t1.get(0) {
             if let Ok(t2) = (*t1).to_string().try_into() {
                 let conn = rustls::ClientConnection::new(Arc::new(config), t2).unwrap();

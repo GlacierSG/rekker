@@ -182,7 +182,7 @@ impl Tcp {
                             },
                         }
                     },
-                    Err(e) => {
+                    Err(_e) => {
                     }
                 }
             }
@@ -258,10 +258,10 @@ impl Tcp {
                                 let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
                                 let _ = stream_clone.write_all(&bytes);
                             },
-                            Err(e) => {},
+                            Err(_e) => {},
                         }
                     },
-                    Err(e) => {
+                    Err(_e) => {
                     }
                 }
             }

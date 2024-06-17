@@ -24,6 +24,18 @@ macro_rules! handle_stream_option {
     }
 }
 impl Udp {
+    pub fn listen(addr: &str) -> std::io::Result<Udp> {
+        let re = Regex::new(r"\s+").unwrap();
+        let addr = re.replace_all(addr.trim(), ":");
+
+        let stream = UdpSocket::bind(addr.as_ref())?; 
+
+        Ok(Udp {
+            stream: Some(stream),
+            buffer: vec![0; 0]
+        })
+    }
+
     pub fn connect(addr: &str) -> std::io::Result<Udp> {
         let re = Regex::new(r"\s+").unwrap();
         let addr = re.replace_all(addr.trim(), ":");
