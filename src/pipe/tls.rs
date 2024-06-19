@@ -13,9 +13,10 @@ use std::io::{ErrorKind, Error};
 use std::time::Duration;
 use std::io::BufReader;
 use std::io::BufRead;
+use super::buffer::Buffer;
 
 pub struct Tls {
-    stream: StreamOwned<ClientConnection,TcpStream>,
+    buffer: Buffer<StreamOwned<ClientConnection,TcpStream>>,
 }
 
 impl Tls {
@@ -56,106 +57,71 @@ impl Tls {
         let mut client = ClientConnection::new(Arc::new(config), domain).unwrap();
         
         let mut tls_stream = StreamOwned::new(client, stream);
+        let buffer = Buffer::new(tls_stream);
 
-        return Ok(Tls {
-            stream: tls_stream,
-        });
+        let mut out = Tls {
+            buffer: buffer,
+        };
+        let _ = out.set_nagle(false);
+        Ok(out)
     }
 }
 
 impl Tls {
+    pub fn log(&mut self, logging: bool) {
+        self.buffer.logging = logging;
+    }
     pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
-        self.stream.sock.set_nodelay(!nagle)
+        self.buffer.stream.sock.set_nodelay(!nagle)
     }
     pub fn nagle(&self) -> Result<bool> {
-        Ok(!self.stream.sock.nodelay()?)
+        Ok(!self.buffer.stream.sock.nodelay()?)
     }
 }
 
 impl Pipe for Tls {
     fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
-        let mut buffer = vec![0; size];
-        self.stream.read(&mut buffer)?;
-        Ok(buffer)
+        self.buffer.recv(size)
     }
     fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
-        let mut buffer = vec![0; size];
-        let mut total = 0;
-        while total >= size {
-            total += self.stream.read(&mut buffer[total..])?;
-        }
-        Ok(buffer)
+        self.buffer.recvn(size)
     }
     fn recvline(&mut self) -> Result<Vec<u8>> {
-        let mut buffer = vec![];
-        while buffer.len() == 0 || buffer[buffer.len()-1] != 10 {
-            let mut byte = vec![0; 1];
-            let l = self.stream.read(&mut byte)?;
-            if l == 1 {
-                buffer.extend(&byte);
-            }
-        }
-
-        Ok(buffer)
+        self.buffer.recvline()
     }
     fn recvuntil(&mut self, suffix: impl AsRef<[u8]>) -> Result<Vec<u8>> {
-        let suffix = suffix.as_ref();
-        if suffix.len() == 0 {
-            return Ok(vec![]);
-        }
-        let mut buffer = vec![];
-        loop {
-            while buffer.len() == 0 || buffer[buffer.len()-1] != suffix[suffix.len()-1] {
-                let mut byte = vec![0; 1];
-                let l = self.stream.read(&mut byte)?;
-                if l == 1 {
-                    buffer.extend(&byte);
-                }
-            }
-            if buffer.len() >= suffix.len() && &suffix[..] == &buffer[buffer.len()-suffix.len()..] {
-                return Ok(buffer);
-            }
-        }
+        self.buffer.recvuntil(suffix)
     }
     fn recvall(&mut self) -> Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-        self.stream.read_to_end(&mut buffer)?;
-        Ok(buffer)
+        self.buffer.recvall()
     }
 
     fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        let msg = msg.as_ref();
-        let _ = self.stream.write(msg);
-        Ok(())
+        self.buffer.send(msg)
     }
     fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        let msg = msg.as_ref();
-        let _ = self.stream.write(msg);
-        let _ = self.stream.write(b"\n");
-        Ok(())
+        self.buffer.sendline(msg)
     }
     fn sendlineafter(&mut self, suffix: impl AsRef<[u8]>, msg: impl AsRef<[u8]>) -> Result<Vec<u8>> {
-        let buf = self.recvuntil(suffix)?;
-        self.sendline(msg)?;
-        Ok(buf)
+        self.buffer.sendlineafter(suffix, msg)
     }
 
     fn recv_timeout(&self) -> Result<Option<Duration>> {
-        self.stream.sock.read_timeout()
+        self.buffer.stream.sock.read_timeout()
     }
     fn set_recv_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
-        self.stream.sock.set_read_timeout(dur)
+        self.buffer.stream.sock.set_read_timeout(dur)
     }
 
     fn send_timeout(&self) -> Result<Option<Duration>> {
-        self.stream.sock.write_timeout()
+        self.buffer.stream.sock.write_timeout()
     }
     fn set_send_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
-        self.stream.sock.set_write_timeout(dur)
+        self.buffer.stream.sock.set_write_timeout(dur)
     }
 
     fn close(&mut self) -> Result<()> {
-        self.stream.sock.shutdown(std::net::Shutdown::Both)
+        self.buffer.stream.sock.shutdown(std::net::Shutdown::Both)
     }
 }
 
@@ -177,7 +143,7 @@ impl Tls {
         self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
-        let mut stream_clone = self.stream.sock.try_clone()?; // TODO: tcpstream is not TLS
+        let mut stream_clone = self.buffer.stream.sock.try_clone()?; // TODO: tcpstream is not TLS
         let receiver = std::thread::spawn(move || {
             let mut buffer = [0; 1024];
             loop {
@@ -256,7 +222,7 @@ impl Tls {
         self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
-        let mut stream_clone = self.stream.sock.try_clone()?;
+        let mut stream_clone = self.buffer.stream.sock.try_clone()?; // TODO: tcpstream is not TLS
         let receiver = std::thread::spawn(move || {
             let mut buffer = [0; 1024];
             loop {

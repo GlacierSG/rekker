@@ -21,7 +21,6 @@ impl<R: Read + Write> Buffer<R> {
         }
     }
 
-
     fn read_to_buf(&mut self) -> io::Result<usize> {
         let mut buf = vec![0; 65535];
         let cap = self.stream.read(&mut buf)?;
