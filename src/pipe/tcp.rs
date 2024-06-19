@@ -36,7 +36,7 @@ impl Tcp {
 
 impl Tcp {
     pub fn log(&mut self, logging: bool) {
-        self.buffer.logging_on = logging;
+        self.buffer.logging = logging;
     }
     pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
         self.buffer.stream.set_nodelay(!nagle)

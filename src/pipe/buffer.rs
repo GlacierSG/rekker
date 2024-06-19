@@ -9,7 +9,7 @@ use std::mem;
 pub struct Buffer<R: Read + Write> {
     pub stream: R,
     buf: Vec<u8>,
-    pub logging_on: bool,
+    pub logging: bool,
 }
 
 impl<R: Read + Write> Buffer<R> {
@@ -17,7 +17,7 @@ impl<R: Read + Write> Buffer<R> {
         Buffer {
             stream: stream,
             buf: vec![],
-            logging_on: false,
+            logging: false,
         }
     }
 
@@ -25,8 +25,14 @@ impl<R: Read + Write> Buffer<R> {
     fn read_to_buf(&mut self) -> io::Result<usize> {
         let mut buf = vec![0; 65535];
         let cap = self.stream.read(&mut buf)?;
+        if cap == 0 {
+             return Err(io::Error::new(
+                    io::ErrorKind::BrokenPipe,
+                    "Pipe Broke",
+                ));
+        }
 
-        if self.logging_on && cap != 0 {
+        if self.logging {
             eprintln!("{} {}", "DEBUG <-".red().bold(), to_lit_colored(&buf[..cap], |x| x.normal(), |x| x.yellow()));
         }
 
@@ -37,7 +43,7 @@ impl<R: Read + Write> Buffer<R> {
         let mut buffer = vec![];
         self.stream.read_to_end(&mut buffer)?;
 
-        if self.logging_on && buffer.len() != 0 {
+        if self.logging && buffer.len() != 0 {
             eprintln!("{} {}", "DEBUG <-".red().bold(), to_lit_colored(&buffer, |x| x.normal(), |x| x.yellow()));
         }
 
@@ -47,7 +53,7 @@ impl<R: Read + Write> Buffer<R> {
 
     pub fn write_all(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
         let msg = msg.as_ref();
-        if self.logging_on && msg.len() != 0{
+        if self.logging && msg.len() != 0 {
             eprintln!("{} {}", "DEBUG ->".red().bold(), to_lit_colored(&msg, |x| x.normal(), |x| x.green()));
         }
 

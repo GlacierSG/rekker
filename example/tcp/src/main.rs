@@ -5,7 +5,8 @@ use std::io::Write;
 fn main() {
     let mut io = Tcp::connect("localhost 9000").unwrap();
     io.log(true);
-    dbg!(io.recvuntil("abc"));
+    dbg!(io.recvn(3).unwrap());
+    dbg!(io.recvuntil("abc").unwrap());
     io.recvline();
     io.sendline("laksjdlkjasdlækj");
     io.interactive();
