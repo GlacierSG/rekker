@@ -9,6 +9,7 @@ Rekker is still in development.
 import rekker
 io = rekker.Tcp("localhost:1234")
 io.send(b"abc")
+io.log(True)
 io.sendline(b"abcd")
 io.sendlineafter(b"abc", b"cde")
 io.recv(123)
