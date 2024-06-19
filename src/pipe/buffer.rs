@@ -26,7 +26,7 @@ impl<R: Read + Write> Buffer<R> {
         let mut buf = vec![0; 65535];
         let cap = self.stream.read(&mut buf)?;
 
-        if self.logging_on {
+        if self.logging_on && cap != 0 {
             eprintln!("{} {}", "DEBUG <-".red().bold(), to_lit_colored(&buf[..cap], |x| x.normal(), |x| x.yellow()));
         }
 
@@ -37,7 +37,7 @@ impl<R: Read + Write> Buffer<R> {
         let mut buffer = vec![];
         self.stream.read_to_end(&mut buffer)?;
 
-        if self.logging_on {
+        if self.logging_on && buffer.len() != 0 {
             eprintln!("{} {}", "DEBUG <-".red().bold(), to_lit_colored(&buffer, |x| x.normal(), |x| x.yellow()));
         }
 
@@ -46,11 +46,12 @@ impl<R: Read + Write> Buffer<R> {
     }
 
     pub fn write_all(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        if self.logging_on {
-            eprintln!("{} {}", "DEBUG ->".red().bold(), to_lit_colored(msg.as_ref(), |x| x.normal(), |x| x.green()));
+        let msg = msg.as_ref();
+        if self.logging_on && msg.len() != 0{
+            eprintln!("{} {}", "DEBUG ->".red().bold(), to_lit_colored(&msg, |x| x.normal(), |x| x.green()));
         }
 
-        self.stream.write_all(msg.as_ref())
+        self.stream.write_all(&msg)
     }
 }
 
@@ -95,9 +96,9 @@ impl<R: Read + Write> Buffer<R> {
             let n = self.read_to_buf()?;
             for j in i..n {
                 if self.buf[j] == suffix[suffix.len()-1] {
-                    if suffix.len() <= self.buf.len() && suffix == &self.buf[self.buf.len()-suffix.len()..] {
-                        let out = self.buf[..j].to_vec();
-                        self.buf.drain(..j);
+                    if suffix.len() <= self.buf.len() && j >= suffix.len()-1 && suffix == &self.buf[j+1-suffix.len()..j+1] {
+                        let out = self.buf[..j+1].to_vec();
+                        self.buf.drain(..j+1);
                         return Ok(out);
                     }
                 }
