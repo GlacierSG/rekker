@@ -7,13 +7,15 @@ use super::pipe::Pipe;
 use std::io;
 use crate::{to_lit_colored, from_lit};
 use std::sync::atomic::{AtomicBool,Ordering};
-use rustls::RootCertStore;
+use rustls::{RootCertStore, ClientConnection, StreamOwned};
+use rustls::pki_types::ServerName;
 use std::io::{ErrorKind, Error};
 use std::time::Duration;
+use std::io::BufReader;
+use std::io::BufRead;
 
 pub struct Tls {
-    stream: TcpStream,
-    conn: rustls::ClientConnection,
+    stream: StreamOwned<ClientConnection,TcpStream>,
 }
 
 impl Tls {
@@ -24,6 +26,23 @@ impl Tls {
 
         let addr: String = re.replace_all(addr.trim(), ":").into_owned();
 
+        let mut domain: ServerName<'_>;
+
+        let t1: Vec<&str> = addr.split(|b| b as u32 == 58).collect(); // split on ':'
+        if let Some(t1) = t1.get(0) {
+            if let Ok(t2) = (*t1).to_string().try_into() {
+                domain = t2;
+            }
+            else {
+                return Err(Error::new(ErrorKind::Other, "Could not parse domain"));
+            }
+        }
+        else {
+            return Err(Error::new(ErrorKind::Other, "Could not parse domain"));
+        }
+
+        let stream = TcpStream::connect(&addr)?;
+
         let root_store = RootCertStore {
             roots: webpki_roots::TLS_SERVER_ROOTS.into(),
         };
@@ -33,54 +52,45 @@ impl Tls {
 
         // Allow SSLKEYLOGFILE
         config.key_log = Arc::new(rustls::KeyLogFile::new());
-        
-        let stream = TcpStream::connect(&addr)?;
-        let t1: Vec<&str> = addr.split(|b| b as u32 == 58).collect(); // split on ':'
-        if let Some(t1) = t1.get(0) {
-            if let Ok(t2) = (*t1).to_string().try_into() {
-                let conn = rustls::ClientConnection::new(Arc::new(config), t2).unwrap();
 
-                return Ok(Tls {
-                    stream: stream,
-                    conn: conn,
-                });
-            }
-        }
-        return Err(Error::new(ErrorKind::Other, "Bad TLS address format"));
+        let mut client = ClientConnection::new(Arc::new(config), domain).unwrap();
+        
+        let mut tls_stream = StreamOwned::new(client, stream);
+
+        return Ok(Tls {
+            stream: tls_stream,
+        });
     }
 }
 
 impl Tls {
     pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
-        self.stream.set_nodelay(nagle)
+        self.stream.sock.set_nodelay(!nagle)
     }
     pub fn nagle(&self) -> Result<bool> {
-        self.stream.nodelay()
+        Ok(!self.stream.sock.nodelay()?)
     }
 }
 
 impl Pipe for Tls {
     fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
-        let mut tls = rustls::Stream::new(&mut self.conn, &mut self.stream);
         let mut buffer = vec![0; size];
-        tls.read(&mut buffer)?;
+        self.stream.read(&mut buffer)?;
         Ok(buffer)
     }
     fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
-        let mut tls = rustls::Stream::new(&mut self.conn, &mut self.stream);
         let mut buffer = vec![0; size];
         let mut total = 0;
         while total >= size {
-            total += tls.read(&mut buffer[total..])?;
+            total += self.stream.read(&mut buffer[total..])?;
         }
         Ok(buffer)
     }
     fn recvline(&mut self) -> Result<Vec<u8>> {
-        let mut tls = rustls::Stream::new(&mut self.conn, &mut self.stream);
         let mut buffer = vec![];
         while buffer.len() == 0 || buffer[buffer.len()-1] != 10 {
             let mut byte = vec![0; 1];
-            let l = tls.read(&mut byte)?;
+            let l = self.stream.read(&mut byte)?;
             if l == 1 {
                 buffer.extend(&byte);
             }
@@ -93,12 +103,11 @@ impl Pipe for Tls {
         if suffix.len() == 0 {
             return Ok(vec![]);
         }
-        let mut tls = rustls::Stream::new(&mut self.conn, &mut self.stream);
         let mut buffer = vec![];
         loop {
             while buffer.len() == 0 || buffer[buffer.len()-1] != suffix[suffix.len()-1] {
                 let mut byte = vec![0; 1];
-                let l = tls.read(&mut byte)?;
+                let l = self.stream.read(&mut byte)?;
                 if l == 1 {
                     buffer.extend(&byte);
                 }
@@ -109,25 +118,20 @@ impl Pipe for Tls {
         }
     }
     fn recvall(&mut self) -> Result<Vec<u8>> {
-        let mut tls = rustls::Stream::new(&mut self.conn, &mut self.stream);
         let mut buffer = Vec::new();
-        tls.read_to_end(&mut buffer)?;
+        self.stream.read_to_end(&mut buffer)?;
         Ok(buffer)
     }
 
     fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        let mut tls = rustls::Stream::new(&mut self.conn, &mut self.stream);
-        
         let msg = msg.as_ref();
-        let _ = tls.write(msg);
+        let _ = self.stream.write(msg);
         Ok(())
     }
     fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        let mut tls = rustls::Stream::new(&mut self.conn, &mut self.stream);
-        
         let msg = msg.as_ref();
-        let _ = tls.write(msg);
-        let _ = tls.write(b"\n");
+        let _ = self.stream.write(msg);
+        let _ = self.stream.write(b"\n");
         Ok(())
     }
     fn sendlineafter(&mut self, suffix: impl AsRef<[u8]>, msg: impl AsRef<[u8]>) -> Result<Vec<u8>> {
@@ -137,21 +141,21 @@ impl Pipe for Tls {
     }
 
     fn recv_timeout(&self) -> Result<Option<Duration>> {
-        self.stream.read_timeout()
+        self.stream.sock.read_timeout()
     }
     fn set_recv_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
-        self.stream.set_read_timeout(dur)
+        self.stream.sock.set_read_timeout(dur)
     }
 
     fn send_timeout(&self) -> Result<Option<Duration>> {
-        self.stream.write_timeout()
+        self.stream.sock.write_timeout()
     }
     fn set_send_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
-        self.stream.set_write_timeout(dur)
+        self.stream.sock.set_write_timeout(dur)
     }
 
     fn close(&mut self) -> Result<()> {
-        self.stream.shutdown(std::net::Shutdown::Both)
+        self.stream.sock.shutdown(std::net::Shutdown::Both)
     }
 }
 
@@ -173,7 +177,7 @@ impl Tls {
         self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
-        let mut stream_clone = self.stream.try_clone()?;
+        let mut stream_clone = self.stream.sock.try_clone()?; // TODO: tcpstream is not TLS
         let receiver = std::thread::spawn(move || {
             let mut buffer = [0; 1024];
             loop {
@@ -252,7 +256,7 @@ impl Tls {
         self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
-        let mut stream_clone = self.stream.try_clone()?;
+        let mut stream_clone = self.stream.sock.try_clone()?;
         let receiver = std::thread::spawn(move || {
             let mut buffer = [0; 1024];
             loop {
@@ -303,4 +307,3 @@ impl Tls {
     }
 
 }
-

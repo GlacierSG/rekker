@@ -7,11 +7,11 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc};
 use colored::*;
 use regex::Regex;
+use super::buffer::Buffer;
 
 #[derive(Debug)]
 pub struct Tcp {
-    stream: TcpStream,
-    reader: BufReader<TcpStream>,
+    buffer: Buffer<TcpStream>,
 }
 
 impl Tcp {
@@ -20,114 +20,81 @@ impl Tcp {
         let addr = re.replace_all(addr.trim(), ":");
 
         let stream = TcpStream::connect(addr.as_ref())?;
-        let reader = BufReader::new(stream.try_clone()?);
+        let buffer = Buffer::new(stream);
     
-
-        let mut tcp =  Tcp{ stream, reader };
-        let _ = tcp.set_nagle(false);
+        let mut tcp = Tcp{ buffer };
+        let _ = tcp.set_nagle(false)?;
 
         Ok(tcp)
     }
     
     pub fn from_stream(stream: TcpStream) -> Result<Self> {
-        let reader = BufReader::new(stream.try_clone()?);
-        Ok(Tcp { stream, reader })
+        let buffer = Buffer::new(stream);
+        Ok(Tcp { buffer })
     }
 }
 
 impl Tcp {
+    pub fn log(&mut self, logging: bool) {
+        self.buffer.logging_on = logging;
+    }
     pub fn set_nagle(&mut self, nagle: bool) -> Result<()> {
-        self.stream.set_nodelay(!nagle)
+        self.buffer.stream.set_nodelay(!nagle)
     }
     pub fn nagle(&self) -> Result<bool> {
-        Ok(!(self.stream.nodelay()?))
+        Ok(!(self.buffer.stream.nodelay()?))
     }
 }
 
 impl Pipe for Tcp {
     fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
-        let mut buffer = vec![0; size];
-        let size = self.reader.read(&mut buffer)?;
-        Ok(buffer[..size].to_vec())
+        self.buffer.recv(size)
     }
 
     fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
-        let mut buffer = vec![0; size];
-        let _ = self.reader.read_exact(&mut buffer)?;
-        Ok(buffer)
+        self.buffer.recvn(size)
     }
 
     fn recvline(&mut self) -> Result<Vec<u8>> {
-        let mut buffer = Vec::new();
-        self.reader.read_until(10, &mut buffer)?;
-
-        Ok(buffer)
+        self.buffer.recvline()
     }
 
     fn recvuntil(&mut self, suffix: impl AsRef<[u8]>) -> Result<Vec<u8>> {
-        let suffix = suffix.as_ref();
-        if suffix.len() == 0 {
-            return Ok(vec![])
-        }
-        let mut buffer = vec![];
-
-        loop {
-            let mut tmp_buffer = vec![];
-
-            let _ = self.reader.read_until(suffix[suffix.len()-1], &mut tmp_buffer)?;
-            if tmp_buffer.len() == 0 {
-                return Err(Error::new(io::ErrorKind::Other, "Got EOF for TCP stream"));
-            }
-            buffer.extend(tmp_buffer);
-            if suffix.len() <= buffer.len() {
-                if &suffix[..] == &buffer[(buffer.len()-suffix.len())..] {
-                    return Ok(buffer);
-                }
-            }
-
-        }
+        self.buffer.recvuntil(suffix)
     }
 
     fn recvall(&mut self) -> Result<Vec<u8>> {
-        let mut buffer = vec![];
-
-        let _ = self.reader.read_to_end(&mut buffer).unwrap();
-        Ok(buffer)
+        self.buffer.recvall()
     }
 
     fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        self.stream.write_all(msg.as_ref())
+        self.buffer.send(msg)
     }
 
     fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        let msg = msg.as_ref();
-        self.send(msg)?;
-        self.send(b"\n")?;
-        Ok(())
+        self.buffer.sendline(msg)
     }
 
     fn sendlineafter(&mut self, suffix: impl AsRef<[u8]>, msg: impl AsRef<[u8]>) -> Result<Vec<u8>> {
-        let buf = self.recvuntil(suffix)?;
-        self.sendline(msg)?;
-        Ok(buf)
+        self.buffer.sendlineafter(suffix, msg)
     }
 
     fn recv_timeout(&self) -> Result<Option<Duration>> {
-        self.stream.read_timeout()
+        self.buffer.stream.read_timeout()
     }
     fn set_recv_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
-        self.stream.set_read_timeout(dur)
+        self.buffer.stream.set_read_timeout(dur)
     }
 
     fn send_timeout(&self) -> Result<Option<Duration>> {
-        self.stream.write_timeout()
+        self.buffer.stream.write_timeout()
     }
     fn set_send_timeout(&mut self, dur: Option<Duration>) -> Result<()> {
-        self.stream.set_write_timeout(dur)
+        self.buffer.stream.set_write_timeout(dur)
     }
 
     fn close(&mut self) -> Result<()> {
-        self.stream.shutdown(std::net::Shutdown::Both)
+        self.buffer.stream.shutdown(std::net::Shutdown::Both)
     }
 }
 impl Tcp {
@@ -148,7 +115,7 @@ impl Tcp {
         self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
-        let mut stream_clone = self.stream.try_clone()?;
+        let mut stream_clone = self.buffer.stream.try_clone()?;
         let receiver = std::thread::spawn(move || {
             let stdin = io::stdin();
             let mut handle = stdin.lock();
@@ -168,12 +135,14 @@ impl Tcp {
                             io::stdout().flush().expect("Unable to flush stdout");
                             break;
                         }
-                        match from_lit(&buffer[..n]) {
+                        match from_lit(&buffer[..n-1]) {
                             Ok(bytes) => {
                                 let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
-                                println!("{}{}{}", go_up, clear_line, lit);
+                                println!("{}{}{} {}", go_up, clear_line, "->".red().bold(), lit);
                                 prompt();
-                                let _ = stream_clone.write_all(&bytes);
+                                if let Err(e) = stream_clone.write_all(&bytes) {
+                                    eprintln!("Unable to write to stream: {}", e);
+                                }
                             },
                             Err(e) => {
                                 eprintln!("{}", e.red());
@@ -192,7 +161,7 @@ impl Tcp {
 
         let mut buffer = [0; 1024];
         loop {
-            match self.reader.read(&mut buffer) {
+            match self.buffer.stream.read(&mut buffer) {
                 Ok(0) => {
                     println!("{}{}{}", begin_line, clear_line, "Pipe broke".red());
                     print!("{}", "Press Enter to continue".red());
@@ -206,7 +175,7 @@ impl Tcp {
                     print!("{}{}", begin_line, clear_line);
                     let lit = to_lit_colored(&response, |x| x.normal(), |x| x.yellow());
                     
-                    println!("{}",lit);
+                    println!("{} {}", "<-".red().bold(), lit);
                     prompt();
                 }
                 Err(_) => {
@@ -237,7 +206,7 @@ impl Tcp {
         self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
 
-        let mut stream_clone = self.stream.try_clone()?;
+        let mut stream_clone = self.buffer.stream.try_clone()?;
         let receiver = std::thread::spawn(move || {
             let stdin = io::stdin();
             let mut handle = stdin.lock();
@@ -256,7 +225,9 @@ impl Tcp {
                         match from_lit(&buffer[..n]) {
                             Ok(bytes) => {
                                 let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
-                                let _ = stream_clone.write_all(&bytes);
+                                if let Err(e) = stream_clone.write_all(&bytes) {
+                                    eprintln!("Unable to write to stream: {}", e);
+                                }
                             },
                             Err(_e) => {},
                         }
@@ -271,7 +242,7 @@ impl Tcp {
 
         let mut buffer = [0; 1024];
         loop {
-            match self.reader.read(&mut buffer) {
+            match self.buffer.stream.read(&mut buffer) {
                 Ok(0) => {
                     running.store(false, Ordering::SeqCst);
                     break;

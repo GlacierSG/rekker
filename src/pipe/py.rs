@@ -189,6 +189,10 @@ impl Tcp {
     fn nagle(&self, _py: Python) -> PyResult<bool> {
         Ok(self.stream.nagle()?)
     }
+
+    fn log(&mut self, _py: Python, logging: bool) -> () {
+        self.stream.log(logging);
+    }
 }
 
 #[pymethods]
