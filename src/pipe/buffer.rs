@@ -4,16 +4,57 @@ use colored::*;
 use crate::to_lit_colored;
 use colored::Colorize;
 use std::mem;
+use chrono::prelude::*;
+
+fn now() -> String {
+    Utc::now().format("%H:%M:%S").to_string()
+}
 
 #[derive(Debug)]
-pub struct Buffer<R: Read + Write> {
-    pub stream: R,
+pub struct WriteBuffer<T: Write> {
+    stream: T,
+    pub logging: bool,
+}
+
+macro_rules! impl_send_func {
+    () => {
+        pub fn write_all(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
+            let msg = msg.as_ref();
+            if self.logging && msg.len() != 0 {
+                eprintln!("{} {} {}", now().red().bold(), "->".red().bold(), to_lit_colored(&msg, |x| x.normal(), |x| x.green()));
+            }
+
+            self.stream.write_all(&msg)
+        }
+        pub fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
+            let msg = msg.as_ref();
+            self.write_all(msg)
+        }
+    }
+}
+
+impl<T: Write> WriteBuffer<T> {
+    pub fn from_stream(stream: T, logging: bool) -> Self {
+        Self {
+            stream: stream,
+            logging: logging
+        }
+    }
+
+    impl_send_func!();
+
+}
+
+#[derive(Debug)]
+pub struct Buffer<T: Read + Write> {
+    pub stream: T,
     buf: Vec<u8>,
     pub logging: bool,
 }
 
-impl<R: Read + Write> Buffer<R> {
-    pub fn new(stream: R) -> Buffer<R> {
+
+impl<T: Read + Write> Buffer<T> {
+    pub fn new(stream: T) -> Self {
         Buffer {
             stream: stream,
             buf: vec![],
@@ -32,7 +73,7 @@ impl<R: Read + Write> Buffer<R> {
         }
 
         if self.logging {
-            eprintln!("{} {}", "DEBUG <-".red().bold(), to_lit_colored(&buf[..cap], |x| x.normal(), |x| x.yellow()));
+            eprintln!("{} {} {}", now().red().bold(), "->".red().bold(), to_lit_colored(&buf[..cap], |x| x.normal(), |x| x.yellow()));
         }
 
         self.buf.extend(&buf[..cap]);
@@ -43,37 +84,32 @@ impl<R: Read + Write> Buffer<R> {
         self.stream.read_to_end(&mut buffer)?;
 
         if self.logging && buffer.len() != 0 {
-            eprintln!("{} {}", "DEBUG <-".red().bold(), to_lit_colored(&buffer, |x| x.normal(), |x| x.yellow()));
+            eprintln!("{} {} {}", now().red().bold(), "->".red().bold(), to_lit_colored(&buffer, |x| x.normal(), |x| x.yellow()));
         }
 
         self.buf.extend(buffer);
         Ok(self.buf.len())
     }
+    impl_send_func!();
 
-    pub fn write_all(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        let msg = msg.as_ref();
-        if self.logging && msg.len() != 0 {
-            eprintln!("{} {}", "DEBUG ->".red().bold(), to_lit_colored(&msg, |x| x.normal(), |x| x.green()));
-        }
-
-        self.stream.write_all(&msg)
-    }
 }
 
 impl<R: Read + Write> Buffer<R> {
+    fn drain_n(&mut self, size: usize) -> Vec<u8> {
+        let out = self.buf[..size].to_vec();
+        self.buf.drain(..size);
+        return out;
+    }
+
     pub fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
         let m = min(self.read_to_buf()?, size);
-
-        let out = self.buf[..m].to_vec();
-        self.buf.drain(..m);
-        return Ok(out);
+        
+        Ok(self.drain_n(m))
     }
     pub fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
         while self.read_to_buf()? < size {}
 
-        let out = self.buf[..size].to_vec();
-        self.buf.drain(..size);
-        return Ok(out);
+        Ok(self.drain_n(size))
     }
     pub fn recvline(&mut self) -> Result<Vec<u8>> {
         let mut i = 0;
@@ -81,9 +117,7 @@ impl<R: Read + Write> Buffer<R> {
             let n = self.read_to_buf()?;
             for j in i..n {
                 if self.buf[j] == 10 {
-                    let out = self.buf[..j].to_vec();
-                    self.buf.drain(..j);
-                    return Ok(out);
+                    return Ok(self.drain_n(j))
                 }
             }
             i = n;
@@ -102,9 +136,7 @@ impl<R: Read + Write> Buffer<R> {
             for j in i..n {
                 if self.buf[j] == suffix[suffix.len()-1] {
                     if suffix.len() <= self.buf.len() && j >= suffix.len()-1 && suffix == &self.buf[j+1-suffix.len()..j+1] {
-                        let out = self.buf[..j+1].to_vec();
-                        self.buf.drain(..j+1);
-                        return Ok(out);
+                        return Ok(self.drain_n(j+1));
                     }
                 }
             }
@@ -117,9 +149,6 @@ impl<R: Read + Write> Buffer<R> {
         Ok(mem::take(&mut self.buf))
     }
 
-    pub fn send(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
-        self.write_all(msg)
-    }
     pub fn sendline(&mut self, msg: impl AsRef<[u8]>) -> Result<()> {
         let msg = msg.as_ref();
         let mut buffer = Vec::with_capacity(msg.len()+1);

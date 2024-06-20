@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc};
 use colored::*;
 use regex::Regex;
-use super::buffer::Buffer;
+use super::buffer::{Buffer, WriteBuffer};
 
 #[derive(Debug)]
 pub struct Tcp {
@@ -201,12 +201,11 @@ impl Tcp {
     pub fn interactive(&mut self) -> Result<()> {
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = running.clone();
+        
+        self.buffer.stream.set_nonblocking(true)?;
 
-        let old_recv_timeout = self.recv_timeout()?;
-        self.set_recv_timeout(Some(Duration::from_millis(1)))?;
 
-
-        let mut stream_clone = self.buffer.stream.try_clone()?;
+        let mut writer = WriteBuffer::from_stream(self.buffer.stream.try_clone()?, self.buffer.logging);
         let receiver = std::thread::spawn(move || {
             let stdin = io::stdin();
             let mut handle = stdin.lock();
@@ -225,7 +224,7 @@ impl Tcp {
                         match from_lit(&buffer[..n]) {
                             Ok(bytes) => {
                                 let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
-                                if let Err(e) = stream_clone.write_all(&bytes) {
+                                if let Err(e) = writer.send(&bytes) {
                                     eprintln!("Unable to write to stream: {}", e);
                                 }
                             },
@@ -240,19 +239,17 @@ impl Tcp {
 
 
 
-        let mut buffer = [0; 1024];
         loop {
-            match self.buffer.stream.read(&mut buffer) {
-                Ok(0) => {
-                    running.store(false, Ordering::SeqCst);
-                    break;
-                }, 
-                Ok(n) => {
-                    let response = &buffer[0..n];
-                    print!("{}", String::from_utf8_lossy(&response));
+            match self.buffer.recv(1024) {
+                Ok(buffer) => {
+                    print!("{}", String::from_utf8_lossy(&buffer));
                     io::stdout().flush().expect("Unable to flush stdout");
                 }
-                Err(_) => {
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {},
+                Err(e) => {
+                    running.store(false, Ordering::SeqCst);
+                    eprintln!("{}", format!("{}", e).red());
+                    print!("{}", "Press Enter to continue".red());
                 }
             }
 
@@ -264,7 +261,7 @@ impl Tcp {
         io::stdout().flush().expect("Unable to flush stdout");
         running.store(false, Ordering::SeqCst);
         
-        self.set_recv_timeout(old_recv_timeout)?;
+        self.buffer.stream.set_nonblocking(false)?;
 
         receiver.join().unwrap();
         
