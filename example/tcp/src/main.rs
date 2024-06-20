@@ -7,11 +7,11 @@ fn main() {
     io.log(true);
 
     //dbg!(io.recv(3).unwrap());
-    dbg!(io.recvuntil(b"abc"));
+    //dbg!(io.recvuntil(b"abc"));
     /*
     dbg!(io.recvuntil("abc").unwrap());
     io.recvline();
     io.sendline("laksjdlkjasdlækj");
 */
-    io.interactive();
+    io.debug();
 }

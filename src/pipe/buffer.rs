@@ -73,7 +73,7 @@ impl<T: Read + Write> Buffer<T> {
         }
 
         if self.logging {
-            eprintln!("{} {} {}", now().red().bold(), "->".red().bold(), to_lit_colored(&buf[..cap], |x| x.normal(), |x| x.yellow()));
+            eprintln!("{} {} {}", now().red().bold(), "<-".red().bold(), to_lit_colored(&buf[..cap], |x| x.normal(), |x| x.yellow()));
         }
 
         self.buf.extend(&buf[..cap]);
@@ -84,7 +84,7 @@ impl<T: Read + Write> Buffer<T> {
         self.stream.read_to_end(&mut buffer)?;
 
         if self.logging && buffer.len() != 0 {
-            eprintln!("{} {} {}", now().red().bold(), "->".red().bold(), to_lit_colored(&buffer, |x| x.normal(), |x| x.yellow()));
+            eprintln!("{} {} {}", now().red().bold(), "<-".red().bold(), to_lit_colored(&buffer, |x| x.normal(), |x| x.yellow()));
         }
 
         self.buf.extend(buffer);

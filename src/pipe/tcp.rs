@@ -107,101 +107,13 @@ impl Tcp {
             io::stdout().flush().expect("Unable to flush stdout");
         }
         prompt();
-        
+
         let running = Arc::new(AtomicBool::new(true));
         let thread_running = running.clone();
 
-        let old_recv_timeout = self.recv_timeout()?;
-        self.set_recv_timeout(Some(Duration::from_millis(1)))?;
+        let logging = self.buffer.logging;
+        self.buffer.logging = true;
 
-
-        let mut stream_clone = self.buffer.stream.try_clone()?;
-        let receiver = std::thread::spawn(move || {
-            let stdin = io::stdin();
-            let mut handle = stdin.lock();
-
-            let mut buffer = [0; 65535];
-            loop {
-                match handle.read(&mut buffer) {
-                    Ok(0) => { 
-                        thread_running.store(false, Ordering::SeqCst);
-                        print!("{}{}", begin_line, clear_line,);
-                        io::stdout().flush().expect("Unable to flush stdout");
-                        break;
-                    },
-                    Ok(n) => {
-                        if !thread_running.load(Ordering::SeqCst) {
-                            print!("{}{}{}", go_up, begin_line, clear_line,);
-                            io::stdout().flush().expect("Unable to flush stdout");
-                            break;
-                        }
-                        match from_lit(&buffer[..n-1]) {
-                            Ok(bytes) => {
-                                let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
-                                println!("{}{}{} {}", go_up, clear_line, "->".red().bold(), lit);
-                                prompt();
-                                if let Err(e) = stream_clone.write_all(&bytes) {
-                                    eprintln!("Unable to write to stream: {}", e);
-                                }
-                            },
-                            Err(e) => {
-                                eprintln!("{}", e.red());
-                                print!("{}", "$ ".red());
-                                io::stdout().flush().expect("Unable to flush stdout");
-                            },
-                        }
-                    },
-                    Err(_e) => {
-                    }
-                }
-            }
-        });    
-
-
-
-        let mut buffer = [0; 1024];
-        loop {
-            match self.buffer.stream.read(&mut buffer) {
-                Ok(0) => {
-                    println!("{}{}{}", begin_line, clear_line, "Pipe broke".red());
-                    print!("{}", "Press Enter to continue".red());
-                    io::stdout().flush().expect("Unable to flush stdout");
-
-                    running.store(false, Ordering::SeqCst);
-                    break;
-                }, 
-                Ok(n) => {
-                    let response = &buffer[0..n];
-                    print!("{}{}", begin_line, clear_line);
-                    let lit = to_lit_colored(&response, |x| x.normal(), |x| x.yellow());
-                    
-                    println!("{} {}", "<-".red().bold(), lit);
-                    prompt();
-                }
-                Err(_) => {
-                }
-            }
-
-            if !running.load(Ordering::SeqCst) { break; }
-        }
-
-
-
-        io::stdout().flush().expect("Unable to flush stdout");
-        running.store(false, Ordering::SeqCst);
-        
-        self.set_recv_timeout(old_recv_timeout)?;
-
-        receiver.join().unwrap();
-        
-        Ok(())
-    }
-
-
-    pub fn interactive(&mut self) -> Result<()> {
-        let running = Arc::new(AtomicBool::new(true));
-        let thread_running = running.clone();
-        
         self.buffer.stream.set_nonblocking(true)?;
 
 
@@ -227,12 +139,75 @@ impl Tcp {
                                 if let Err(e) = writer.send(&bytes) {
                                     eprintln!("Unable to write to stream: {}", e);
                                 }
+                                prompt();
                             },
-                            Err(_e) => {},
+                            Err(_e) => {
+                                dbg!("abc");
+                            },
                         }
                     },
                     Err(_e) => {
                     }
+                }
+            }
+        });    
+
+        loop {
+            match self.buffer.recv(1024) {
+                Ok(buffer) => {
+                    prompt();
+                }
+                Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {},
+                Err(e) => {
+                    running.store(false, Ordering::SeqCst);
+                    eprintln!("{}", format!("{}", e).red());
+                    print!("{}", "Press Enter to continue".red());
+                }
+            }
+
+            if !running.load(Ordering::SeqCst) { break; }
+        }
+
+        io::stdout().flush().expect("Unable to flush stdout");
+        running.store(false, Ordering::SeqCst);
+        
+
+        receiver.join().unwrap();
+
+        self.buffer.stream.set_nonblocking(false)?;
+        self.buffer.logging = logging;
+        
+        Ok(())
+    }
+
+    pub fn interactive(&mut self) -> Result<()> {
+        let running = Arc::new(AtomicBool::new(true));
+        let thread_running = running.clone();
+        
+        self.buffer.stream.set_nonblocking(true)?;
+
+
+        let mut writer = WriteBuffer::from_stream(self.buffer.stream.try_clone()?, self.buffer.logging);
+        let receiver = std::thread::spawn(move || {
+            let stdin = io::stdin();
+            let mut handle = stdin.lock();
+
+            let mut buffer = [0; 65535];
+            loop {
+                match handle.read(&mut buffer) {
+                    Ok(0) => { 
+                        thread_running.store(false, Ordering::SeqCst);
+                        break;
+                    },
+                    Ok(n) => {
+                        if !thread_running.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        if let Err(e) = writer.send(&buffer[..n]) {
+                            eprintln!("Unable to write to stream: {}", e);
+                        }
+                    },
+                    Err(_e) => {}
                 }
             }
         });    
