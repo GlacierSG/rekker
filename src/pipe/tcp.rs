@@ -141,9 +141,7 @@ impl Tcp {
                                 }
                                 prompt();
                             },
-                            Err(_e) => {
-                                dbg!("abc");
-                            },
+                            Err(_e) => {},
                         }
                     },
                     Err(_e) => {

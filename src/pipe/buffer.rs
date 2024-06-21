@@ -102,22 +102,37 @@ impl<R: Read + Write> Buffer<R> {
     }
 
     pub fn recv(&mut self, size: usize) -> Result<Vec<u8>> {
+        if self.buf.len() > 0 { 
+            let m = min(self.buf.len(), size);
+            return Ok(self.drain_n(m))
+        }
+
         let m = min(self.read_to_buf()?, size);
         
         Ok(self.drain_n(m))
     }
     pub fn recvn(&mut self, size: usize) -> Result<Vec<u8>> {
+        if self.buf.len() >= size { 
+            return Ok(self.drain_n(size))
+        }
         while self.read_to_buf()? < size {}
 
         Ok(self.drain_n(size))
     }
     pub fn recvline(&mut self) -> Result<Vec<u8>> {
+        if self.buf.len() > 0 { 
+            for j in 0..self.buf.len() {
+                if self.buf[j] == 10 {
+                    return Ok(self.drain_n(j+1))
+                }
+            }
+        }
         let mut i = 0;
         loop {
             let n = self.read_to_buf()?;
             for j in i..n {
                 if self.buf[j] == 10 {
-                    return Ok(self.drain_n(j))
+                    return Ok(self.drain_n(j+1))
                 }
             }
             i = n;
@@ -131,8 +146,8 @@ impl<R: Read + Write> Buffer<R> {
         }
 
         let mut i = 0;
+        let mut n = self.buf.len();
         loop {
-            let n = self.read_to_buf()?;
             for j in i..n {
                 if self.buf[j] == suffix[suffix.len()-1] {
                     if suffix.len() <= self.buf.len() && j >= suffix.len()-1 && suffix == &self.buf[j+1-suffix.len()..j+1] {
@@ -141,6 +156,7 @@ impl<R: Read + Write> Buffer<R> {
                 }
             }
             i = n;
+            n = self.read_to_buf()?;
         }
     }
     pub fn recvall(&mut self) -> Result<Vec<u8>> {
