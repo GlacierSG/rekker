@@ -1,8 +1,8 @@
 use std::net::TcpStream;
-use std::io::{self, Read, Write, Result, BufReader, BufRead, Error};
+use std::io::{self, Read, Write, Result};
 use std::time::Duration;
 use super::pipe::Pipe;
-use crate::{from_lit, to_lit_colored};
+use crate::{from_lit};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc};
 use colored::*;
@@ -99,9 +99,6 @@ impl Pipe for Tcp {
 }
 impl Tcp {
     pub fn debug(&mut self) -> Result<()> {
-        let go_up = "\x1b[1A";
-        let clear_line = "\x1b[2K";
-        let begin_line = "\r";
         fn prompt() { 
             print!("{} ", "$".red());
             io::stdout().flush().expect("Unable to flush stdout");
@@ -135,7 +132,6 @@ impl Tcp {
                         }
                         match from_lit(&buffer[..n]) {
                             Ok(bytes) => {
-                                let lit = to_lit_colored(&bytes, |x| x.normal(), |x| x.green());
                                 if let Err(e) = writer.send(&bytes) {
                                     eprintln!("Unable to write to stream: {}", e);
                                 }
@@ -152,7 +148,7 @@ impl Tcp {
 
         loop {
             match self.buffer.recv(1024) {
-                Ok(buffer) => {
+                Ok(_) => {
                     prompt();
                 }
                 Err(ref e) if e.kind() == io::ErrorKind::WouldBlock => {},

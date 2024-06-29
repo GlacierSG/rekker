@@ -4,19 +4,17 @@ use pyo3::types::{PyBytes, PyString, PyAny};
 use std::time::Duration;
 use humantime::parse_duration;
 
-fn inp_to_bytes(obj: &PyAny) -> PyResult<Vec<u8>> {
-    if obj.is_instance_of::<PyString>() {
-        let s: String = obj.extract()?;
-        Ok(s.as_bytes().to_vec())
-    } else if obj.is_instance_of::<PyBytes>() {
-        let b: Vec<u8> = obj.extract()?;
-        Ok(b)
-    } else {
-        Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>(
-            "Expected a string or bytes object",
-        ))
+fn pyany_to_bytes(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
+    if data.is_instance_of::<PyString>() {
+        let data: String = data.extract()?;
+        return Ok(data.into_bytes());
+    }
+    else {
+        let data: Vec<u8> = data.extract()?;
+        return Ok(data);
     }
 }
+
 
 fn py_parse_duration(duration: Option<&str>) -> PyResult<Option<Duration>> {
     match duration {
@@ -77,16 +75,19 @@ macro_rules! impl_py_stream {
 
         #[pymethods]
         impl $type {
+            #[pyo3(signature = (size, timeout=None))]
             fn recv(&mut self, py: Python, size: usize, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
                 let out = save_recv_timeout_wrapper!(self, self.stream.recv(size), timeout);
 
-                Ok(PyBytes::new(py, &out).into())
+                Ok(PyBytes::new_bound(py, &out).into())
             }
+            #[pyo3(signature = (size, timeout=None))]
             fn recvn(&mut self, py: Python, size: usize, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
                 let out = save_recv_timeout_wrapper!(self, self.stream.recvn(size), timeout);
 
-                Ok(PyBytes::new(py, &out).into())
+                Ok(PyBytes::new_bound(py, &out).into())
             }
+            #[pyo3(signature = (drop=None, timeout=None))]
             fn recvline(&mut self, py: Python, drop: Option<bool>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
                 let mut out = save_recv_timeout_wrapper!(self, self.stream.recvline(), timeout);
                 
@@ -96,10 +97,11 @@ macro_rules! impl_py_stream {
                         },
                     _ => {}
                 }
-                Ok(PyBytes::new(py, &out).into())
+                Ok(PyBytes::new_bound(py, &out).into())
             }
-            fn recvuntil(&mut self, py: Python, suffix: &PyAny, drop: Option<bool>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
-                let suffix = inp_to_bytes(&suffix)?;
+            #[pyo3(signature = (suffix, drop=None, timeout=None))]
+            fn recvuntil(&mut self, py: Python, suffix: Bound<'_, PyAny>, drop: Option<bool>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
+                let suffix = pyany_to_bytes(&suffix)?;
 
                 let mut out = save_recv_timeout_wrapper!(self, self.stream.recvuntil(suffix), timeout);
 
@@ -110,29 +112,32 @@ macro_rules! impl_py_stream {
                     _ => {}
                 }
 
-                Ok(PyBytes::new(py, &out).into())
+                Ok(PyBytes::new_bound(py, &out).into())
             }
+            #[pyo3(signature = (timeout=None))]
             fn recvall(&mut self, py: Python, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
                 let out = save_recv_timeout_wrapper!(self, self.stream.recvall(), timeout);
 
-                Ok(PyBytes::new(py, &out).into())
+                Ok(PyBytes::new_bound(py, &out).into())
             }
-
-            fn send(&mut self, _py: Python, data: &PyAny, timeout: Option<&str>) -> PyResult<()> {
-                let data = inp_to_bytes(&data)?;
+            #[pyo3(signature = (data, timeout=None))]
+            fn send(&mut self, _py: Python, data: Bound<'_, PyAny>, timeout: Option<&str>) -> PyResult<()> {
+                let data = pyany_to_bytes(&data)?;
                 let out = save_send_timeout_wrapper!(self, self.stream.send(data), timeout);
                 Ok(out)
             }
-            fn sendline(&mut self, _py: Python, data: &PyAny, timeout: Option<&str>) -> PyResult<()> {
-                let data = inp_to_bytes(&data)?;
+            #[pyo3(signature = (data, timeout=None))]
+            fn sendline(&mut self, _py: Python, data: Bound<'_, PyAny>, timeout: Option<&str>) -> PyResult<()> {
+                let data = pyany_to_bytes(&data)?;
                 let out = save_send_timeout_wrapper!(self, self.stream.sendline(data), timeout);
                 Ok(out)
             }
-            fn sendlineafter(&mut self, py: Python, data: &PyAny, suffix: &PyAny, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
-                let data = inp_to_bytes(&data)?;
-                let suffix = inp_to_bytes(&suffix)?;
+            #[pyo3(signature = (data, suffix, timeout=None))]
+            fn sendlineafter(&mut self, py: Python, data: Bound<'_, PyAny>, suffix: Bound<'_, PyAny>, timeout: Option<&str>) -> PyResult<Py<PyBytes>> {
+                let data = pyany_to_bytes(&data)?;
+                let suffix = pyany_to_bytes(&suffix)?;
                 let out = save_send_timeout_wrapper!(self, self.stream.sendlineafter(data, suffix), timeout);
-                Ok(PyBytes::new(py, &out).into())
+                Ok(PyBytes::new_bound(py, &out).into())
             }
 
             fn recv_timeout(&self, _py: Python) -> PyResult<Option<String>> {
@@ -141,6 +146,7 @@ macro_rules! impl_py_stream {
                     None => Ok(None)
                 }
             }
+            #[pyo3(signature = (duration))]
             fn set_recv_timeout(&mut self, _py: Python, duration: Option<&str>) -> PyResult<()> {
                 Ok(self.stream.set_recv_timeout(py_parse_duration(duration)?)?)
             }
@@ -151,6 +157,7 @@ macro_rules! impl_py_stream {
                     None => Ok(None)
                 }
             }
+            #[pyo3(signature = (duration))]
             fn set_send_timeout(&mut self, _py: Python, duration: Option<&str>) -> PyResult<()> {
                 Ok(self.stream.set_send_timeout(py_parse_duration(duration)?)?)
             }
@@ -198,6 +205,7 @@ impl Tcp {
 #[pymethods]
 impl Udp {
     #[new] 
+    #[pyo3(signature = (addr, listen=None))]
     fn connect(addr: &str, listen: Option<bool>) -> std::io::Result<Udp> {
         if Some(true) == listen {
             return Ok(Udp {
@@ -243,7 +251,7 @@ impl TcpListen {
 }
 
 
-pub fn pipes(_py: Python, m: &PyModule)  -> PyResult<()> {
+pub fn pipes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Tcp>()?;
     m.add_class::<TcpListen>()?;
     m.add_class::<Udp>()?;

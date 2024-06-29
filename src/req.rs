@@ -130,7 +130,7 @@ impl Req {
                 return Err(());
             }
             if let Some(r) = parts.next() {
-                let mut l = 0;
+                let l;
                 if r.ends_with("HTTP/1.1") {
                     l = 8;
                 }

@@ -8,7 +8,7 @@ pub use pipe::pipe::*;
 pub use pipe::tcp::*;
 pub use pipe::udp::*;
 pub use pipe::tls::*;
-pub use pipe::udp::*;
+//pub use pipe::udp::*;
 
 #[cfg(feature = "pyo3")]
 pub mod py;

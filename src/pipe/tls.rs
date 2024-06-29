@@ -11,8 +11,6 @@ use rustls::{RootCertStore, ClientConnection, StreamOwned};
 use rustls::pki_types::ServerName;
 use std::io::{ErrorKind, Error};
 use std::time::Duration;
-use std::io::BufReader;
-use std::io::BufRead;
 use super::buffer::Buffer;
 
 pub struct Tls {
@@ -27,7 +25,7 @@ impl Tls {
 
         let addr: String = re.replace_all(addr.trim(), ":").into_owned();
 
-        let mut domain: ServerName<'_>;
+        let domain: ServerName<'_>;
 
         let t1: Vec<&str> = addr.split(|b| b as u32 == 58).collect(); // split on ':'
         if let Some(t1) = t1.get(0) {
@@ -54,9 +52,9 @@ impl Tls {
         // Allow SSLKEYLOGFILE
         config.key_log = Arc::new(rustls::KeyLogFile::new());
 
-        let mut client = ClientConnection::new(Arc::new(config), domain).unwrap();
+        let client = ClientConnection::new(Arc::new(config), domain).unwrap();
         
-        let mut tls_stream = StreamOwned::new(client, stream);
+        let tls_stream = StreamOwned::new(client, stream);
         let buffer = Buffer::new(tls_stream);
 
         let mut out = Tls {

@@ -1,6 +1,5 @@
-use std::io::{self, Read, Write, Result, Error};
+use std::io::{self, Read, Write, Result};
 use std::cmp::min;
-use colored::*;
 use crate::to_lit_colored;
 use colored::Colorize;
 use std::mem;
