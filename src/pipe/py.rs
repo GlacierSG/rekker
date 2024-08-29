@@ -7,11 +7,12 @@ use crate::{Error, Result};
 pub fn pipes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Pipe>()?;
     m.add_function(wrap_pyfunction!(remote, m)?)?;
+    m.add_function(wrap_pyfunction!(listener, m)?)?;
     Ok(())
 }
 
 #[pyfunction]
-pub fn remote(addr: String, port: Option<usize>, tls: Option<bool>, udp: Option<bool>) -> PyResult<Pipe> {
+pub fn remote(addr: String, tls: Option<bool>, udp: Option<bool>) -> PyResult<Pipe> {
     match (tls, udp) {
         (None, None) => {
             Ok(Pipe::tcp(&addr)?)
@@ -24,7 +25,24 @@ pub fn remote(addr: String, port: Option<usize>, tls: Option<bool>, udp: Option<
         },
         _ => todo!()
     }
+}
 
+#[pyfunction]
+pub fn listener(addr: String, tls: Option<bool>, udp: Option<bool>) -> PyResult<Listener> {
+    match (tls, udp) {
+        (None, None) => {
+            Ok(Listener::tcp(&addr)?)
+        },
+        /*
+        (None, Some(true)) => {
+            Ok(Listener::udp(&addr)?)
+        },
+        (Some(true), None) => {
+            Ok(Listener::tls(&addr)?)
+        },
+    */
+        _ => todo!()
+    }
 }
 
 fn pyany_to_bytes(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
@@ -89,9 +107,29 @@ macro_rules! save_send_timeout_wrapper {
     }}
 }
 
+
+#[pyclass]
+pub struct Listener {
+    stream: crate::Listener
+}
+
+impl Listener {
+    fn tcp(addr: &str) -> Result<Listener> {
+        Ok(Listener { stream: crate::Listener::tcp(addr)? })
+    }
+}
+
+#[pymethods]
+impl Listener {
+    fn accept(&mut self) -> Result<(Pipe, String)> {
+        let (pipe, s) = self.stream.accept()?;
+        Ok((Pipe { stream: pipe }, s))
+    }
+}
+
 #[pyclass]
 pub struct Pipe {
-    stream: crate::Pipe
+    pub(crate) stream: crate::Pipe
 }
 impl Pipe {
     fn tcp(addr: &str) -> Result<Pipe> {

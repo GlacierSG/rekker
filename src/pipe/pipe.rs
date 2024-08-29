@@ -1,6 +1,6 @@
 use crate::{Result, Error};
 use std::time::Duration;
-use std::net::{TcpStream, UdpSocket};
+use std::net::{TcpStream, TcpListener, UdpSocket};
 use std::cmp::min;
 use std::io::{self, Read, Write};
 use chrono::prelude::*;
@@ -13,8 +13,38 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::mpsc;
 
+fn trim_addr(addr: &str) -> String {
+    let re = Regex::new(r"\s+").unwrap();
+    let addr = re.replace_all(addr.trim(), ":");
+    addr.to_string()
+}
+
 fn now() -> String {
     Utc::now().format("%H:%M:%S").to_string()
+}
+
+pub enum Listener {
+    Tcp { listener: TcpListener, log: bool },
+}
+
+impl Listener {
+    pub fn tcp(addr: &str) -> Result<Self> {
+        let re = Regex::new(r"\s+").unwrap();
+        let addr = re.replace_all(addr.trim(), ":");
+
+        let listener = TcpListener::bind(addr.as_ref())?;
+        Ok(Listener::Tcp { listener, log: false })
+    }
+    
+    pub fn accept(&self) -> Result<(Pipe, String)> {
+        match self {
+            Listener::Tcp { listener, .. } => {
+                let (stream, addr) = listener.accept()?;
+                let stream = Pipe::from(stream);
+                Ok((stream, addr.to_string()))
+            },
+        }
+    }
 }
 
 pub enum Pipe {
@@ -23,15 +53,25 @@ pub enum Pipe {
     Tls { stream: StreamOwned<ClientConnection, TcpStream>, buffer: Vec<u8>, log: bool },
 }
 
+impl From<TcpStream> for Pipe {
+    fn from(stream: TcpStream) -> Pipe {
+        Pipe::Tcp { stream, buffer: vec![], log: false }
+    }
+}
+impl From<UdpSocket> for Pipe {
+    fn from(stream: UdpSocket) -> Pipe {
+        Pipe::Udp { stream, buffer: vec![], log: false }
+    }
+}
+impl From<StreamOwned<ClientConnection, TcpStream>> for Pipe {
+    fn from(stream: StreamOwned<ClientConnection, TcpStream>) -> Pipe {
+        Pipe::Tls { stream, buffer: vec![], log: false }
+    }
+}
 
 impl Pipe {
-    fn trim_addr(addr: &str) -> String {
-        let re = Regex::new(r"\s+").unwrap();
-        let addr = re.replace_all(addr.trim(), ":");
-        addr.to_string()
-    }
     pub fn tcp(addr: &str) -> Result<Pipe> {
-        let addr = Self::trim_addr(addr);
+        let addr = trim_addr(addr);
 
         let stream = TcpStream::connect(addr)?;
     
@@ -39,7 +79,7 @@ impl Pipe {
     }
 
     pub fn udp(addr: &str) -> Result<Pipe> {
-        let addr = Self::trim_addr(addr);
+        let addr = trim_addr(addr);
 
         let stream = UdpSocket::bind("0.0.0.0:0")?; 
         stream.connect(addr)?;
@@ -51,7 +91,7 @@ impl Pipe {
         })
     }
     pub fn tls(addr: &str) -> Result<Pipe> {
-        let addr = Self::trim_addr(addr);
+        let addr = trim_addr(addr);
 
         let domain: ServerName<'_>;
 
