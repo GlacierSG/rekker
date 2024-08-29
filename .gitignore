@@ -5,6 +5,6 @@ Cargo.lock
 **/*.rs.bk
 *.pdb
 
-.env/
 .vscode/
+venv/
 

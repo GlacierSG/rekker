@@ -1,25 +1,26 @@
 use crate::literal::to_lit_colored;
+use crate::{Res, Tcp, Tls, Error, Result, Pipe, Http1};
 use colored::*;
 
 pub struct Req {
     pub raw_method: Vec<u8>,
+    pub raw_path: Vec<u8>,
     pub raw_headers: Vec<(Vec<u8>, Vec<u8>)>,
     pub raw_body: Vec<u8>,
-    pub raw_path: Vec<u8>,
     pub raw_url: Vec<u8>,
-    pub raw_proxy: String,
+    pub is_proxy: bool,
     pub is_tls: bool,
 }
 
 impl Req {
-    pub fn new() -> Req {
-        Req {
-            raw_method: b"GET".to_vec(),
-            raw_path: b"/".to_vec(),
-            raw_url: b"".to_vec(),
+    pub fn new() -> Self {
+        Self {
+            raw_method: vec![],
+            raw_path: vec![],
+            raw_url: vec![],
             raw_headers: vec![],
-            raw_body: b"".to_vec(),
-            raw_proxy: String::new(),
+            raw_body: vec![],
+            is_proxy: false,
             is_tls: false,
         }
     }
@@ -39,7 +40,7 @@ impl Req {
 
         let mut l = url.len();
         for i in t..url.len() {
-            if url[i] == 47 {
+            if url[i] == 47 { // Find next `/`
                 l = i;
                 break;
             }
@@ -51,17 +52,25 @@ impl Req {
         }
         self
     }
-    pub fn get(self, url: impl AsRef<[u8]>) -> Self {
-        self.method(b"GET")
-            .url(url.as_ref())
+    pub fn get(url: impl AsRef<[u8]>) -> Self {
+        Self::new()
+            .method(b"GET")
+            .url(url)
     }
-    pub fn post(self, url: impl AsRef<[u8]>) -> Self {
-        self.method(b"POST")
-            .url(url.as_ref())
+    pub fn post(url: impl AsRef<[u8]>) -> Self {
+        Self::new()
+            .method(b"POST")
+            .url(url)
     }
-    pub fn put(self, url: impl AsRef<[u8]>) -> Self {
-        self.method(b"PUT")
-            .url(url.as_ref())
+    pub fn put(url: impl AsRef<[u8]>) -> Self {
+        Self::new()
+            .method(b"PUT")
+            .url(url)
+    }
+    pub fn delete(url: impl AsRef<[u8]>) -> Self {
+        Self::new()
+            .method(b"DELETE")
+            .url(url)
     }
     pub fn method(mut self, method: impl AsRef<[u8]>) -> Self {
         self.raw_method = method.as_ref().to_vec();
@@ -95,7 +104,7 @@ impl Req {
         }
         let mut out = colored(&self.raw_method);
         out.push_str(" ");
-        if self.raw_proxy.len() != 0 {
+        if self.is_proxy {
             out.push_str(&colored(&self.raw_url));
         }
         out.push_str(&colored(&self.raw_path));
@@ -111,23 +120,18 @@ impl Req {
         out
     }
 
-    pub fn from_string(value: &str) -> Result<Req, ()> {
+    pub fn from_string(value: &str) -> Result<Req> {
         let mut req = Req::new();
         let mut total = 0;
-        let mut lines;
-        if let Some(v) = value.strip_prefix("\n") {
-            lines = v.split("\n");
-        }
-        else {
-            return Err(());
-        }
+        let mut lines = value.strip_prefix("\n").unwrap_or(value).split("\n");
+
         if let Some(first_line) = lines.next() {
             total += first_line.len()+1;
             let mut parts = first_line.splitn(2, " ");
             if let Some(method) = parts.next() {
                 req.raw_method = method.as_bytes().to_vec();
             } else {
-                return Err(());
+                return Err(Error::ParsingError("no method".to_string()));
             }
             if let Some(r) = parts.next() {
                 let l;
@@ -138,19 +142,19 @@ impl Req {
                     l = 6;
                 }
                 else {
-                    return Err(());
+                    return Err(Error::ParsingError("unknown protocol".to_string()));
                 }
                 if r.len() > l {
                     req.raw_path = r[..r.len()-l-1].as_bytes().to_vec();
                 } else {
-                    return Err(());
+                    return Err(Error::ParsingError("no path".to_string()));
                 }
             } else {
-                return Err(());
+                return Err(Error::ParsingError("unable to parse after method".to_string()));
             }
         }
         else {
-            return Err(());
+            return Err(Error::ParsingError("unable to parse first line".to_string()));
         }
         loop {
             if let Some(line) = lines.next() {
@@ -164,26 +168,35 @@ impl Req {
                         req = req.header(header, value);
                     }
                     else {
-                        return Err(());
+                        return Err(Error::ParsingError("unable to parse header value".to_string()));
                     }
                 }
                 else {
-                    return Err(());
+                    return Err(Error::ParsingError("unable to parse header".to_string()));
                 }
             }
             else {
-                return Err(());
+                break
             }
         }
         if value.len() < total+1 {
-            return Err(());
+            return Err(Error::ParsingError("todo".to_string()));
         }
         req.raw_body = value[total+1..].as_bytes().to_vec();
         Ok(req)
     }
 
-    pub fn proxy(mut self, proxy: &str) -> Self {
-        self.raw_proxy = proxy.to_string();
-        self
+    pub fn proxy(mut self, loc: impl AsRef<str>) -> Result<Res> {
+        let loc = loc.as_ref();
+        todo!("Send request http/1.1 with is_proxy = true");
     }
+    pub fn send(&self, loc: impl AsRef<str>) -> Result<Res> {
+        let loc = loc.as_ref();
+        if self.is_tls {
+            let mut io = Tls::connect(loc).unwrap();
+            let http1 = Http1::from(self);
+        }
+        Ok(Res::new()) 
+    }
+
 }

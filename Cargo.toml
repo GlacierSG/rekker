@@ -20,6 +20,7 @@ ctrlc = "3.4.4"
 regex = "1.10.4"
 humantime = "2.1.0"
 chrono = { version = "0.4.38", features = ["now"] }
+thiserror = "1.0.63"
 
 [lib]
 crate-type = ["cdylib", "lib"]

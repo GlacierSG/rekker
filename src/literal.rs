@@ -1,5 +1,9 @@
 use colored::*;
 
+pub fn bytes_to_lit(bytes: impl AsRef<[u8]>) -> String {
+    to_lit_colored(bytes, |x| x.normal(), |x| x.green())
+}
+
 pub fn to_lit_colored(bytes: impl AsRef<[u8]>, normal_fn: fn(&str) -> ColoredString, byte_fn: fn(&str) -> ColoredString) -> String {
     let bytes = bytes.as_ref();
     let mut lit = String::new();
