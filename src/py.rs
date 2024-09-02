@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
-use crate::Pipe;
 use crate::pipe::py::*;
+use crate::http::py::*;
 use std::process;
 use crate::Error;
 
@@ -24,6 +24,7 @@ fn rekker(m: &Bound<'_, PyModule>) -> PyResult<()> {
     }).expect("Error setting Ctrl+C handler");
 
     let _ = pipes(&m);
+    let _ = http(&m);
     Ok(())
 }
 

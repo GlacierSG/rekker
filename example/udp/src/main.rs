@@ -3,7 +3,7 @@ use std::io::stdout;
 use std::io::Write;
 
 fn main() -> std::io::Result<()>{
-    let mut io = Udp::connect("localhost:6666").unwrap();
+    let mut io = Pipe::udp("localhost:6666")?;
     io.send(b"abc")?;
     let a = [0,1];
     println!("{:?}", &a[..2]);

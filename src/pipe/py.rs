@@ -2,7 +2,14 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString, PyAny};
 use std::time::Duration;
 use humantime::parse_duration;
-use crate::{Error, Result};
+use crate::Result;
+use regex::Regex;
+
+fn trim_addr(addr: &str) -> String {
+    let re = Regex::new(r"\s+").unwrap();
+    let addr = re.replace_all(addr.trim(), ":");
+    addr.to_string()
+}
 
 pub fn pipes(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Pipe>()?;
@@ -12,7 +19,10 @@ pub fn pipes(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[pyfunction]
+#[pyo3(signature = (addr, tls=None, udp=None))]
 pub fn remote(addr: String, tls: Option<bool>, udp: Option<bool>) -> PyResult<Pipe> {
+    let addr = trim_addr(&addr);
+
     match (tls, udp) {
         (None, None) => {
             Ok(Pipe::tcp(&addr)?)
@@ -28,6 +38,7 @@ pub fn remote(addr: String, tls: Option<bool>, udp: Option<bool>) -> PyResult<Pi
 }
 
 #[pyfunction]
+#[pyo3(signature = (addr, tls=None, udp=None))]
 pub fn listener(addr: String, tls: Option<bool>, udp: Option<bool>) -> PyResult<Listener> {
     match (tls, udp) {
         (None, None) => {
@@ -258,32 +269,4 @@ impl Pipe {
     }
 
 }
-
-
-
-/*
-
-
-#[pyclass]
-pub struct TcpListen {
-    listener: super::tcp_listen::TcpListen
-}
-
-
-#[pymethods]
-impl TcpListen {
-    #[new]
-    fn new(address: &str) -> PyResult<Self> {
-        Ok( TcpListen{ listener: super::tcp_listen::TcpListen::new(address)? } )
-    }
-
-    fn accept(&self, py: Python) -> PyResult<(PyObject, String)> {
-        let (stream, addr) = self.listener
-            .accept()?;
-        let py_stream = Py::new(py, Tcp { stream })?;
-        Ok((py_stream.to_object(py), addr.to_string()))
-    }
-}
-
-*/
 

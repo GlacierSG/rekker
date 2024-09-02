@@ -6,8 +6,8 @@ Rekker is still in development.
 
 ## Example
 ```python
-import rekker
-io = rekker.Tcp("localhost:1234")
+from rekker import remote
+io = remote("localhost:1234")
 io.send(b"abc")
 io.log(True)
 io.sendline(b"abcd")

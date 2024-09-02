@@ -1,10 +1,10 @@
 use colored::*;
 
 pub fn bytes_to_lit(bytes: impl AsRef<[u8]>) -> String {
-    to_lit_colored(bytes, |x| x.normal(), |x| x.green())
+    bytes_to_lit_color(bytes, |x| x.normal(), |x| x.normal())
 }
 
-pub fn to_lit_colored(bytes: impl AsRef<[u8]>, normal_fn: fn(&str) -> ColoredString, byte_fn: fn(&str) -> ColoredString) -> String {
+pub fn bytes_to_lit_color(bytes: impl AsRef<[u8]>, normal_fn: fn(&str) -> ColoredString, byte_fn: fn(&str) -> ColoredString) -> String {
     let bytes = bytes.as_ref();
     let mut lit = String::new();
     for byte in bytes {
@@ -22,7 +22,7 @@ pub fn to_lit_colored(bytes: impl AsRef<[u8]>, normal_fn: fn(&str) -> ColoredStr
     lit
 }
 
-pub fn from_lit(input: impl AsRef<[u8]>) -> Result<Vec<u8>, String> {
+pub fn lit_to_bytes(input: impl AsRef<[u8]>) -> Result<Vec<u8>, String> {
     let mut result = Vec::new();
     let bytes = input.as_ref();
     let mut i = 0;
@@ -154,7 +154,7 @@ mod tests {
             b"\xfc", b"\xfd", b"\xfe", b"\xff",
         ];
         for (r, b) in raw.iter().zip(bytes) {
-            assert_eq!(&from_lit(r).unwrap(), b);
+            assert_eq!(&lit_to_bytes(r).unwrap(), b);
         }
 
         for (r, b) in raw.iter().zip(bytes) {
@@ -163,7 +163,7 @@ mod tests {
             let mut t2 = b.to_vec();
             t2.extend_from_slice(b"abc");
             assert_eq!(
-                from_lit(t1).unwrap(),
+                lit_to_bytes(t1).unwrap(),
                 t2
             );
         }
@@ -174,7 +174,7 @@ mod tests {
             let mut t2 = b"abc".to_vec();
             t2.extend_from_slice(b);
             assert_eq!(
-                from_lit(t1).unwrap(),
+                lit_to_bytes(t1).unwrap(),
                 t2
             );
         }

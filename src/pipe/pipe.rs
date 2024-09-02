@@ -1,23 +1,17 @@
-use crate::{Result, Error};
+use crate::{Result, Error, bytes_to_lit_color, lit_to_bytes};
+use aho_corasick::AhoCorasick;
 use std::time::Duration;
 use std::net::{TcpStream, TcpListener, UdpSocket};
 use std::cmp::min;
 use std::io::{self, Read, Write};
 use chrono::prelude::*;
-use crate::{to_lit_colored, from_lit};
 use colored::Colorize;
-use regex::Regex;
 use rustls::{RootCertStore, ClientConnection, StreamOwned};
 use rustls::pki_types::ServerName;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::sync::mpsc;
 
-fn trim_addr(addr: &str) -> String {
-    let re = Regex::new(r"\s+").unwrap();
-    let addr = re.replace_all(addr.trim(), ":");
-    addr.to_string()
-}
 
 fn now() -> String {
     Utc::now().format("%H:%M:%S").to_string()
@@ -29,10 +23,7 @@ pub enum Listener {
 
 impl Listener {
     pub fn tcp(addr: &str) -> Result<Self> {
-        let re = Regex::new(r"\s+").unwrap();
-        let addr = re.replace_all(addr.trim(), ":");
-
-        let listener = TcpListener::bind(addr.as_ref())?;
+        let listener = TcpListener::bind(addr)?;
         Ok(Listener::Tcp { listener, log: false })
     }
     
@@ -71,16 +62,12 @@ impl From<StreamOwned<ClientConnection, TcpStream>> for Pipe {
 
 impl Pipe {
     pub fn tcp(addr: &str) -> Result<Pipe> {
-        let addr = trim_addr(addr);
-
         let stream = TcpStream::connect(addr)?;
     
         Ok(Self::Tcp{ stream, buffer: vec![], log: false })
     }
 
     pub fn udp(addr: &str) -> Result<Pipe> {
-        let addr = trim_addr(addr);
-
         let stream = UdpSocket::bind("0.0.0.0:0")?; 
         stream.connect(addr)?;
 
@@ -91,8 +78,6 @@ impl Pipe {
         })
     }
     pub fn tls(addr: &str) -> Result<Pipe> {
-        let addr = trim_addr(addr);
-
         let domain: ServerName<'_>;
 
         let t1: Vec<&str> = addr.split(|b| b as u32 == 58).collect(); // split on ':'
@@ -176,7 +161,7 @@ impl Pipe {
         }
 
         if self.is_logging() {
-            eprintln!("{} {} {} ", now().red().bold(), "<-".red().bold(), to_lit_colored(&buf[..cap], |x| x.normal(), |x| x.yellow()));
+            eprintln!("{} {} {} ", now().red().bold(), "<-".red().bold(), bytes_to_lit_color(&buf[..cap], |x| x.normal(), |x| x.yellow()));
         }
 
         let buffer = match self {
@@ -234,7 +219,6 @@ impl Pipe {
 
             match buffer.iter().skip(idx).position(|&x| x == 10).map(|pos| pos + idx) {
                 Some(i) => {
-                    idx = i+1;
                     return Ok(self.drain_n(i+1))
                 },
                 None => {
@@ -249,22 +233,20 @@ impl Pipe {
         let suffix = suffix.as_ref();
         if suffix.len() == 0 { return Ok(vec![]); }
 
-        let mut idx = 0;
+        let mut li = 0;
+        let ac = AhoCorasick::new(&[suffix]).unwrap();
         loop {
             let buffer = match self {
                 Self::Tcp { buffer, .. } => buffer,
                 Self::Udp { buffer, .. } => buffer,
                 Self::Tls { buffer, .. } => buffer,
             };
-            
-            for j in idx..buffer.len() {
-                if buffer[j] == suffix[suffix.len()-1] {
-                    if suffix.len() <= buffer.len() && j >= suffix.len()-1 && suffix == &buffer[j+1-suffix.len()..j+1] {
-                        return Ok(self.drain_n(j+1));
-                    }
-                }
+
+            if let Some(ri) = ac.find_iter(&buffer[li..]).next() {
+                return Ok(self.drain_n(li+ri.end()));
             }
-            idx = buffer.len();
+
+            li = buffer.len();
             let _ = self.read_to_buffer()?;
         }
     }
@@ -280,7 +262,7 @@ impl Pipe {
         if msg.len() == 0 { return Ok(()); }
 
         if self.is_logging() {
-            eprintln!("{} {} {} ", now().red().bold(), "->".red().bold(), to_lit_colored(&msg, |x| x.normal(), |x| x.green()));
+            eprintln!("{} {} {} ", now().red().bold(), "->".red().bold(), bytes_to_lit_color(&msg, |x| x.normal(), |x| x.green()));
         }
         match self {
             Self::Tcp { stream, .. } => { stream.write_all(msg)?; },
@@ -386,7 +368,7 @@ impl Pipe {
                         if !thread_running.load(Ordering::SeqCst) {
                             break;
                         }
-                        match from_lit(&buffer[..n]) {
+                        match lit_to_bytes(&buffer[..n]) {
                             Ok(bytes) => {
                                 if let Err(e) = tx.send(bytes) {
                                     eprintln!("Unable to write to stream: {}", e);
@@ -415,6 +397,7 @@ impl Pipe {
                     if n.len() == 0 { 
                         running.store(false, Ordering::SeqCst);
                         eprint!("{}", "Pipe broke (Press Enter to continue)".red());
+                        io::stderr().flush().expect("Unable to flush stdout");
                         break;
                     }
                     else {
@@ -423,9 +406,10 @@ impl Pipe {
                 }
                 
                 Err(Error::Io { source }) if source.kind() == io::ErrorKind::WouldBlock => {},
-                Err(e) => {
+                Err(_e) => {
                     running.store(false, Ordering::SeqCst);
                     eprint!("{}", "Pipe broke (Press Enter to continue)".red());
+                    io::stderr().flush().expect("Unable to flush stdout");
                     break;
                 }
             }
@@ -487,11 +471,13 @@ impl Pipe {
                     if n.len() == 0 { 
                         running.store(false, Ordering::SeqCst);
                         eprint!("{}", "Pipe broke (Press Enter to continue)".red());
+                        io::stderr().flush().expect("Unable to flush stdout");
                         break;
                     }
                     else {
                         let s = String::from_utf8_lossy(&n);
                         print!("{}", s);
+                        io::stdout().flush().expect("Unable to flush stdout");
                     }
                 }
                 
@@ -499,6 +485,7 @@ impl Pipe {
                 Err(_e) => {
                     running.store(false, Ordering::SeqCst);
                     eprint!("{}", "Pipe broke (Press Enter to continue)".red());
+                    io::stderr().flush().expect("Unable to flush stdout");
                     break;
                 }
             }
