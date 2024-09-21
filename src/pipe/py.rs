@@ -1,8 +1,9 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString, PyAny};
+use pyo3::exceptions::PyTypeError;
 use std::time::Duration;
 use humantime::parse_duration;
-use crate::Result;
+use crate::{Result, Error};
 use regex::Regex;
 
 fn trim_addr(addr: &str) -> String {
@@ -55,18 +56,17 @@ pub fn listener(addr: String, tls: Option<bool>, udp: Option<bool>) -> PyResult<
         _ => todo!()
     }
 }
-
-fn pyany_to_bytes(data: &Bound<'_, PyAny>) -> PyResult<Vec<u8>> {
-    if data.is_instance_of::<PyString>() {
-        let data: String = data.extract()?;
-        return Ok(data.into_bytes());
+fn pyany_to_bytes<'a>(data: &'a Bound<'_, PyAny>) -> PyResult<&'a [u8]> {
+    if let Ok(py_str) = data.downcast::<PyString>() {
+        Ok(py_str.to_str()?.as_bytes())
+    }
+    else if let Ok(py_bytes) = data.downcast::<PyBytes>() {
+        Ok(py_bytes.as_bytes())
     }
     else {
-        let data: Vec<u8> = data.extract()?;
-        return Ok(data);
+        Err(PyErr::new::<pyo3::exceptions::PyTypeError, _>("Expected bytes or string"))
     }
 }
-
 
 fn py_parse_duration(duration: Option<&str>) -> PyResult<Option<Duration>> {
     match duration {
